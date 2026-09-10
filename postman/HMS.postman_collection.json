@@ -752,7 +752,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"dayOfWeek\": \"MONDAY\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"13:00\",\n  \"slotDurationMin\": 15\n}"
+              "raw": "{\n  \"slots\": [\n    {\n      \"dayOfWeek\": \"MONDAY\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"13:00\",\n      \"slotDurationMin\": 15\n    }\n  ]\n}"
             },
             "auth": {
               "type": "bearer",
@@ -1101,7 +1101,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"patientId\": 1,\n  \"doctorId\": 1,\n  \"appointmentId\": 1,\n  \"chiefComplaint\": \"Chest pain\",\n  \"notes\": \"Stable, follow-up advised\"\n}"
+              "raw": "{\n  \"patientId\": 1,\n  \"doctorId\": 1,\n  \"appointmentId\": 1,\n  \"recordType\": \"CONSULTATION\",\n  \"chiefComplaint\": \"Chest pain\",\n  \"notes\": \"Stable, follow-up advised\"\n}"
             },
             "auth": {
               "type": "bearer",
@@ -1701,7 +1701,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"prescriptionId\": 1,\n  \"patientId\": 1,\n  \"patientCategory\": \"RETAIL\",\n  \"items\": [\n    {\n      \"drugId\": 1,\n      \"quantity\": 10\n    }\n  ]\n}"
+              "raw": "{\n  \"prescriptionId\": 1,\n  \"patientId\": 1,\n  \"patientCategory\": \"GENERAL\",\n  \"items\": [\n    {\n      \"drugId\": 1,\n      \"quantity\": 10\n    }\n  ]\n}"
             },
             "auth": {
               "type": "bearer",
@@ -1891,7 +1891,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"invoiceId\": 1,\n  \"method\": \"UPI\",\n  \"amount\": 525.0,\n  \"transactionRef\": \"UPI-REF-001\"\n}"
+              "raw": "{\n  \"invoiceId\": 1,\n  \"method\": \"UPI\",\n  \"amount\": 525.0,\n  \"reference\": \"john@okhdfcbank\"\n}"
             },
             "auth": {
               "type": "bearer",
