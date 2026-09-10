@@ -32,6 +32,17 @@ jwt:
   access-token-expiration-ms: ${JWT_EXPIRATION_MS:900000}
   refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
 
+hms:
+  appointment:
+    cancellation-window-minutes: 60
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 3000
+        readTimeout: 3000
+
 eureka:
   client:
     service-url:

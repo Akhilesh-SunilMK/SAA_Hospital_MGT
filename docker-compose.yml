@@ -1,0 +1,394 @@
+x-mysql-common: &mysql-common
+  image: mysql:8.0
+  restart: unless-stopped
+  environment:
+    MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+    MYSQL_USER: ${DB_USER:-hms}
+    MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+  networks: [hms-network]
+  command: --default-authentication-plugin=mysql_native_password
+
+x-service-env-common: &service-env-common
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+  CONFIG_SERVER_URL: http://config-server:8888
+  JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-hms-shared-signing-secret-key-32-bytes-min}
+  DB_USER: ${DB_USER:-hms}
+  DB_PASSWORD: ${DB_PASSWORD:-hms}
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: 5672
+  RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+
+services:
+  # ---------------------------------------------------------------- infra --
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    ports: ["5672:5672", "15672:15672"]
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  service-registry:
+    build:
+      context: .
+      dockerfile: service-registry/Dockerfile
+    restart: unless-stopped
+    ports: ["8761:8761"]
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  config-server:
+    build:
+      context: .
+      dockerfile: config-server/Dockerfile
+    restart: unless-stopped
+    ports: ["8888:8888"]
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+    depends_on:
+      service-registry: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8888/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    environment:
+      <<: *service-env-common
+    depends_on:
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ------------------------------------------------------- MySQL per service --
+  mysql-auth:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_auth
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["auth-data:/var/lib/mysql"]
+    healthcheck: &mysql-healthcheck
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  mysql-patient:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_patient
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["patient-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-doctor:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_doctor
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["doctor-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-appointment:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_appointment
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["appointment-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-emr:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_emr
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["emr-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-lab:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_lab
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["lab-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-pharmacy:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_pharmacy
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["pharmacy-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-billing:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_billing
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["billing-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  mysql-notification:
+    <<: *mysql-common
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: hms_notification
+      MYSQL_USER: ${DB_USER:-hms}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
+    volumes: ["notification-data:/var/lib/mysql"]
+    healthcheck: *mysql-healthcheck
+
+  # ------------------------------------------------------------ business services --
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8081:8081"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-auth:3306/hms_auth?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-auth: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  patient-service:
+    build:
+      context: .
+      dockerfile: patient-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8082:8082"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-patient:3306/hms_patient?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-patient: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  doctor-service:
+    build:
+      context: .
+      dockerfile: doctor-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8083:8083"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-doctor:3306/hms_doctor?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-doctor: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  appointment-service:
+    build:
+      context: .
+      dockerfile: appointment-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8084:8084"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-appointment:3306/hms_appointment?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-appointment: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      doctor-service: { condition: service_started }
+      patient-service: { condition: service_started }
+      billing-service: { condition: service_started }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  emr-service:
+    build:
+      context: .
+      dockerfile: emr-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8085:8085"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-emr:3306/hms_emr?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-emr: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  lab-service:
+    build:
+      context: .
+      dockerfile: lab-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8086:8086"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-lab:3306/hms_lab?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-lab: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  pharmacy-service:
+    build:
+      context: .
+      dockerfile: pharmacy-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8087:8087"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-pharmacy:3306/hms_pharmacy?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-pharmacy: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8087/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  billing-service:
+    build:
+      context: .
+      dockerfile: billing-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8088:8088"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-billing:3306/hms_billing?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-billing: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8088/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    restart: unless-stopped
+    ports: ["8089:8089"]
+    environment:
+      <<: *service-env-common
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-notification:3306/hms_notification?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    depends_on:
+      mysql-notification: { condition: service_healthy }
+      service-registry: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8089/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+networks:
+  hms-network:
+    driver: bridge
+
+volumes:
+  auth-data:
+  patient-data:
+  doctor-data:
+  appointment-data:
+  emr-data:
+  lab-data:
+  pharmacy-data:
+  billing-data:
+  notification-data:

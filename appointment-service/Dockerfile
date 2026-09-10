@@ -1,17 +1,18 @@
+# syntax=docker/dockerfile:1
 # ---- Build stage ----
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
 COPY pom.xml /build/pom.xml
 COPY common /build/common
 COPY appointment-service /build/appointment-service
-RUN mvn -q -f /build/pom.xml -N install
-RUN mvn -q -f /build/common/pom.xml install -DskipTests
-RUN mvn -q -f /build/appointment-service/pom.xml package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository mvn -q -f /build/pom.xml -N install
+RUN --mount=type=cache,target=/root/.m2/repository mvn -q -f /build/common/pom.xml install -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository mvn -q -f /build/appointment-service/pom.xml package -DskipTests
 
 # ---- Runtime stage ----
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
-RUN addgroup -S hms && adduser -S hms -G hms
+RUN groupadd -r hms && useradd -r -g hms hms
 COPY --from=build /build/appointment-service/target/appointment-service.jar app.jar
 RUN chown hms:hms app.jar
 USER hms
