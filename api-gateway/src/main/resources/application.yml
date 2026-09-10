@@ -1,0 +1,84 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+            allowedHeaders: "*"
+            allowCredentials: true
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/**
+        - id: patient-service
+          uri: lb://patient-service
+          predicates:
+            - Path=/api/v1/patients/**
+        - id: doctor-service
+          uri: lb://doctor-service
+          predicates:
+            - Path=/api/v1/doctors/**
+        - id: appointment-service
+          uri: lb://appointment-service
+          predicates:
+            - Path=/api/v1/appointments/**
+        - id: emr-service
+          uri: lb://emr-service
+          predicates:
+            - Path=/api/v1/emr/**
+        - id: lab-service
+          uri: lb://lab-service
+          predicates:
+            - Path=/api/v1/lab/**
+        - id: pharmacy-service
+          uri: lb://pharmacy-service
+          predicates:
+            - Path=/api/v1/pharmacy/**
+        - id: billing-service
+          uri: lb://billing-service
+          predicates:
+            - Path=/api/v1/billing/**
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/v1/notifications/**
+
+jwt:
+  secret: ${JWT_SECRET:dev-only-change-me-hms-shared-signing-secret-key-32-bytes-min}
+
+hms:
+  gateway:
+    public-paths:
+      - /api/v1/auth/register
+      - /api/v1/auth/login
+      - /api/v1/auth/refresh
+      - /api/v1/auth/forgot-password
+    rate-limit:
+      capacity: 100
+      refill-per-second: 20
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway

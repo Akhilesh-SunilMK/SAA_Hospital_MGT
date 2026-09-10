@@ -1,0 +1,47 @@
+# Shared cross-cutting configuration served to every HMS service via
+# spring.config.import=optional:configserver:http://config-server:8888
+# Per SRS 3.5 (resilience, monitoring) and 7.3 (OpenAPI, maintainability).
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 15s
+        permitted-number-of-calls-in-half-open-state: 5
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [traceId=%X{traceId}] %logger{36} - %msg%n"
