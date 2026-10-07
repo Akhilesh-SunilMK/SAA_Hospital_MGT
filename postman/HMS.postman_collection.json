@@ -1,60 +1,88 @@
 {
   "info": {
     "name": "Hospital Management System (HMS) API",
-    "description": "Postman collection covering every endpoint documented in the HMS SRS section 6.2. All requests go through the API Gateway (default http://localhost:8080). Run 'Auth > Login' first (or Register then Login) to populate {{accessToken}} via its test script.",
+    "description": "End-to-end demo of every HMS service through the API Gateway.\n\nHOW TO USE\n1. Start the stack: docker compose up -d --build (wait until all containers are healthy).\n2. Run the folders top to bottom, starting with '0. Setup' -> 'Start new demo run'. Or click Run collection to execute everything; each request has pass/fail tests.\n\nSetup creates one user per role and stores each login token in its own variable (adminToken, doctorToken, ...), so every request is already sent as the right role. IDs created along the way (patientId, appointmentId, ...) are saved automatically. Re-running is safe: usernames get a fresh runId each time.\n\nIf you changed the bootstrap admin in .env, update the adminEmail / adminPassword collection variables.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "gatewayUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "accessToken",
-      "value": ""
-    },
-    {
-      "key": "refreshToken",
-      "value": ""
-    }
-  ],
   "item": [
     {
-      "name": "Auth",
+      "name": "0. Setup - users & roles",
+      "description": "Run first. Logs in the bootstrap admin and creates one user per role.",
       "item": [
         {
-          "name": "Register",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Start new demo run",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const runId = String(Date.now()).slice(-7);",
+                  "pm.collectionVariables.set('runId', runId);",
+                  "const d = new Date(); d.setDate(d.getDate() + 3);",
+                  "while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);",
+                  "const iso = x => x.toISOString().slice(0, 10);",
+                  "pm.collectionVariables.set('apptDate', iso(d));",
+                  "pm.collectionVariables.set('apptDay', ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'][d.getDay()]);",
+                  "const leave = new Date(d); leave.setDate(leave.getDate() + 28);",
+                  "pm.collectionVariables.set('leaveFrom', iso(leave));",
+                  "leave.setDate(leave.getDate() + 2); pm.collectionVariables.set('leaveTo', iso(leave));",
+                  "const now = new Date(); pm.collectionVariables.set('monthStart', iso(new Date(now.getFullYear(), now.getMonth(), 1)));",
+                  "const later = new Date(); later.setDate(later.getDate() + 30); pm.collectionVariables.set('reportTo', iso(later));"
+                ]
               }
-            ],
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "raw": "{{gatewayUrl}}/actuator/health",
               "host": [
                 "{{gatewayUrl}}"
               ],
               "path": [
-                "api",
-                "v1",
-                "auth",
-                "register"
+                "actuator",
+                "health"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"dr.rao\",\n  \"email\": \"dr.rao@hms.local\",\n  \"password\": \"Passw0rd!123\",\n  \"role\": \"DOCTOR\",\n  \"firstName\": \"A.\",\n  \"lastName\": \"Rao\"\n}"
-            },
+            "description": "Prepares this run: a unique suffix for usernames (so the collection can be re-run against the same database) and appointment/leave dates computed from today. Always run this first.",
             "auth": {
               "type": "noauth"
             }
           }
         },
         {
-          "name": "Login",
+          "name": "Login as bootstrap ADMIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('bootstrapAdminToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -75,61 +103,36 @@
                 "login"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"usernameOrEmail\": \"dr.rao@hms.local\",\n  \"password\": \"Passw0rd!123\"\n}"
-            },
+            "description": "The first admin is created at startup from HMS_ADMIN_EMAIL / HMS_ADMIN_PASSWORD.",
             "auth": {
               "type": "noauth"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const res = pm.response.json();",
-                  "if (res.data && res.data.accessToken) { pm.collectionVariables.set('accessToken', res.data.accessToken); }",
-                  "if (res.data && res.data.refreshToken) { pm.collectionVariables.set('refreshToken', res.data.refreshToken); }"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Refresh Token",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/auth/refresh",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "refresh"
-              ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-            },
-            "auth": {
-              "type": "noauth"
+              "raw": "{\n  \"usernameOrEmail\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Logout",
+          "name": "Self-register as ADMIN is refused (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -139,7 +142,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/auth/logout",
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -147,26 +150,101 @@
                 "api",
                 "v1",
                 "auth",
-                "logout"
+                "register"
               ]
+            },
+            "description": "Security: nobody can make themselves an admin through public registration.",
+            "auth": {
+              "type": "noauth"
             },
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"username\": \"rogue_{{runId}}\",\n  \"email\": \"rogue_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Rogue\",\n  \"lastName\": \"User\",\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register ADMIN (created by an admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
             },
+            "description": "Only an existing admin can create another admin.",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{bootstrapAdminToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_{{runId}}\",\n  \"email\": \"admin_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Demo\",\n  \"lastName\": \"Admin\",\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Forgot Password",
+          "name": "Login ADMIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('adminToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -176,7 +254,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/auth/forgot-password",
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -184,28 +262,788 @@
                 "api",
                 "v1",
                 "auth",
-                "forgot-password"
+                "login"
               ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"dr.rao@hms.local\"\n}"
-            },
-            "auth": {
-              "type": "noauth"
+              "raw": "{\n  \"usernameOrEmail\": \"admin_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Current User (me)",
+          "name": "Register RECEPTIONIST",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('receptionistUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"receptionist_{{runId}}\",\n  \"email\": \"receptionist_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Receptionist\",\n  \"lastName\": \"Demo\",\n  \"role\": \"RECEPTIONIST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login RECEPTIONIST",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('receptionistToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"receptionist_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register DOCTOR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('doctorUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"doctor_{{runId}}\",\n  \"email\": \"doctor_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Doctor\",\n  \"lastName\": \"Demo\",\n  \"role\": \"DOCTOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login DOCTOR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('doctorToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"doctor_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register NURSE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('nurseUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"nurse_{{runId}}\",\n  \"email\": \"nurse_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Nurse\",\n  \"lastName\": \"Demo\",\n  \"role\": \"NURSE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login NURSE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('nurseToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"nurse_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register LAB_TECH",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('labtechUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"lab_tech_{{runId}}\",\n  \"email\": \"lab_tech_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Lab Tech\",\n  \"lastName\": \"Demo\",\n  \"role\": \"LAB_TECH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login LAB_TECH",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('labtechToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"lab_tech_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register PHARMACIST",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('pharmacistUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"pharmacist_{{runId}}\",\n  \"email\": \"pharmacist_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Pharmacist\",\n  \"lastName\": \"Demo\",\n  \"role\": \"PHARMACIST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login PHARMACIST",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('pharmacistToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"pharmacist_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register ACCOUNTANT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('accountantUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"accountant_{{runId}}\",\n  \"email\": \"accountant_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Accountant\",\n  \"lastName\": \"Demo\",\n  \"role\": \"ACCOUNTANT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login ACCOUNTANT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('accountantToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"accountant_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register PATIENT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('patientUserId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"patient_{{runId}}\",\n  \"email\": \"patient_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Patient\",\n  \"lastName\": \"Demo\",\n  \"role\": \"PATIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login PATIENT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('patientToken', data.accessToken);",
+                  "pm.collectionVariables.set('patientRefreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"patient_{{runId}}@hms.local\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Current user (me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Role is DOCTOR', () => pm.expect(data.role).to.eql('DOCTOR'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{gatewayUrl}}/api/v1/auth/me",
               "host": [
@@ -218,24 +1056,415 @@
                 "me"
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
               ]
+            }
+          }
+        },
+        {
+          "name": "No token is rejected (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/patients",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "patients"
+              ]
+            },
+            "description": "Security: every API except login/register needs a valid JWT.",
+            "auth": {
+              "type": "noauth"
             }
           }
         }
       ]
     },
     {
-      "name": "Patient",
+      "name": "1. Doctor",
+      "description": "Doctor profile, weekly schedule, availability, leave.",
       "item": [
         {
-          "name": "Register Patient",
+          "name": "Create Doctor Profile (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('doctorId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/doctors",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctors"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{doctorUserId}},\n  \"firstName\": \"Asha\",\n  \"lastName\": \"Rao\",\n  \"registrationNo\": \"KMC-{{runId}}\",\n  \"qualification\": \"MBBS, MD\",\n  \"specialisation\": \"Cardiology\",\n  \"department\": \"Cardiology\",\n  \"consultationFee\": 500.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/doctors/{{doctorId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctors",
+                "{{doctorId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter Doctors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/doctors?specialisation=Cardiology&department=Cardiology",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctors"
+              ],
+              "query": [
+                {
+                  "key": "specialisation",
+                  "value": "Cardiology"
+                },
+                {
+                  "key": "department",
+                  "value": "Cardiology"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set Weekly Schedule (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/doctors/{{doctorId}}/schedule",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctors",
+                "{{doctorId}}",
+                "schedule"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slots\": [\n    {\n      \"dayOfWeek\": \"{{apptDay}}\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"13:00\",\n      \"slotDurationMin\": 15\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Available Slots",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Has free slots', () => pm.expect(JSON.stringify(data)).to.include('10:30'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/doctors/{{doctorId}}/availability?date={{apptDate}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctors",
+                "{{doctorId}}",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "{{apptDate}}"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark Leave (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/doctors/{{doctorId}}/leave",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctors",
+                "{{doctorId}}",
+                "leave"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromDate\": \"{{leaveFrom}}\",\n  \"toDate\": \"{{leaveTo}}\",\n  \"reason\": \"Conference\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Patient",
+      "description": "Patient registration (linked to the PATIENT login), allergies, contacts, IPD.",
+      "item": [
+        {
+          "name": "Register Patient (RECEPTIONIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('patientId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -255,33 +1484,51 @@
                 "patients"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"dob\": \"1990-05-12\",\n  \"gender\": \"MALE\",\n  \"bloodGroup\": \"O+\",\n  \"phone\": \"+91-9000000000\",\n  \"email\": \"john.doe@example.com\",\n  \"address\": \"12 MG Road, Bengaluru\"\n}"
-            },
+            "description": "userId links this patient record to the PATIENT login, so that user can see their own data.",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"dob\": \"1990-05-12\",\n  \"gender\": \"MALE\",\n  \"bloodGroup\": \"O+\",\n  \"phone\": \"+91-9000000000\",\n  \"email\": \"john.{{runId}}@example.com\",\n  \"address\": \"12 MG Road, Bengaluru\",\n  \"userId\": {{patientUserId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Get Patient by ID",
+          "name": "Patient views own profile (PATIENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('It is their own record', () => pm.expect(data.id).to.eql(pm.collectionVariables.get('patientId') * 1));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1",
+              "raw": "{{gatewayUrl}}/api/v1/patients/me",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -289,30 +1536,42 @@
                 "api",
                 "v1",
                 "patients",
-                "1"
+                "me"
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
             }
           }
         },
         {
-          "name": "Search Patients",
+          "name": "Search Patients (NURSE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{gatewayUrl}}/api/v1/patients?search=Doe&page=0&size=20",
               "host": [
@@ -338,19 +1597,36 @@
                 }
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{nurseToken}}",
+                  "type": "string"
                 }
               ]
             }
           }
         },
         {
-          "name": "Update Patient",
+          "name": "Update Patient (RECEPTIONIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
             "header": [
@@ -360,7 +1636,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1",
+              "raw": "{{gatewayUrl}}/api/v1/patients/{{patientId}}",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -368,59 +1644,48 @@
                 "api",
                 "v1",
                 "patients",
-                "1"
+                "{{patientId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
+                }
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"+91-9111111111\"\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
+              "raw": "{\n  \"phone\": \"+91-9111111111\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Soft-delete Patient",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "patients",
-                "1"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
           }
         },
         {
-          "name": "Admit to IPD",
+          "name": "Add Allergy (NURSE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -430,7 +1695,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1/admit",
+              "raw": "{{gatewayUrl}}/api/v1/patients/{{patientId}}/allergies",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -438,103 +1703,49 @@
                 "api",
                 "v1",
                 "patients",
-                "1",
-                "admit"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"wardId\": \"GEN-A\",\n  \"bedNo\": \"12\"\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Discharge from IPD",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1/discharge",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "patients",
-                "1",
-                "discharge"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Add Allergy",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1/allergies",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "patients",
-                "1",
+                "{{patientId}}",
                 "allergies"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"allergen\": \"Penicillin\",\n  \"severity\": \"HIGH\",\n  \"notedOn\": \"2026-01-10\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{nurseToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"allergen\": \"Penicillin\",\n  \"severity\": \"HIGH\",\n  \"notedOn\": \"2026-01-10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Add Emergency Contact",
+          "name": "Add Emergency Contact (NURSE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -544,7 +1755,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/patients/1/emergency-contacts",
+              "raw": "{{gatewayUrl}}/api/v1/patients/{{patientId}}/emergency-contacts",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -552,32 +1763,49 @@
                 "api",
                 "v1",
                 "patients",
-                "1",
+                "{{patientId}}",
                 "emergency-contacts"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"relation\": \"Spouse\",\n  \"phone\": \"+91-9222222222\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{nurseToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"relation\": \"Spouse\",\n  \"phone\": \"+91-9222222222\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
-        }
-      ]
-    },
-    {
-      "name": "Doctor",
-      "item": [
+        },
         {
-          "name": "Create Doctor Profile",
+          "name": "Admit to IPD (RECEPTIONIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -587,186 +1815,57 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/doctors",
+              "raw": "{{gatewayUrl}}/api/v1/patients/{{patientId}}/admit",
               "host": [
                 "{{gatewayUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "doctors"
+                "patients",
+                "{{patientId}}",
+                "admit"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
+                }
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": 1,\n  \"firstName\": \"A.\",\n  \"lastName\": \"Rao\",\n  \"registrationNo\": \"KMC-10234\",\n  \"qualification\": \"MBBS, MD\",\n  \"specialisation\": \"Cardiology\",\n  \"department\": \"Cardiology\",\n  \"consultationFee\": 500.0\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
+              "raw": "{\n  \"wardId\": \"GEN-A\",\n  \"bedNo\": \"12\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Doctor",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/doctors/1",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "doctors",
-                "1"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
           }
         },
         {
-          "name": "Filter Doctors",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Discharge from IPD (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/doctors?specialisation=Cardiology&department=Cardiology",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "doctors"
-              ],
-              "query": [
-                {
-                  "key": "specialisation",
-                  "value": "Cardiology"
-                },
-                {
-                  "key": "department",
-                  "value": "Cardiology"
-                }
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
-          }
-        },
-        {
-          "name": "Available Slots",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/doctors/1/availability?date=2026-09-15",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "doctors",
-                "1",
-                "availability"
-              ],
-              "query": [
-                {
-                  "key": "date",
-                  "value": "2026-09-15"
-                }
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Schedule",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/doctors/1/schedule",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "doctors",
-                "1",
-                "schedule"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"slots\": [\n    {\n      \"dayOfWeek\": \"MONDAY\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"13:00\",\n      \"slotDurationMin\": 15\n    }\n  ]\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Mark Leave",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -776,40 +1875,64 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/doctors/1/leave",
+              "raw": "{{gatewayUrl}}/api/v1/patients/{{patientId}}/discharge",
               "host": [
                 "{{gatewayUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "doctors",
-                "1",
-                "leave"
+                "patients",
+                "{{patientId}}",
+                "discharge"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fromDate\": \"2026-09-20\",\n  \"toDate\": \"2026-09-22\",\n  \"reason\": \"Conference\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
     },
     {
-      "name": "Appointment",
+      "name": "3. Appointment",
+      "description": "Booking saga, double-booking guard, reschedule, check-in, queue, cancel.",
       "item": [
         {
-          "name": "Book Appointment",
+          "name": "Book Appointment (PATIENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('appointmentId', data.appointmentId);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -829,25 +1952,45 @@
                 "appointments"
               ]
             },
+            "description": "Saga: reserves the slot, then billing-service creates a provisional invoice; if billing fails the booking is rolled back.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"patientId\": 1,\n  \"doctorId\": 1,\n  \"slot\": \"2026-09-15T10:30:00\",\n  \"type\": \"FOLLOW_UP\",\n  \"reason\": \"Post-operative review\",\n  \"durationMinutes\": 30,\n  \"insuranceClaimed\": false\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"doctorId\": {{doctorId}},\n  \"slot\": \"{{apptDate}}T10:30:00\",\n  \"type\": \"OPD\",\n  \"reason\": \"Chest pain\",\n  \"durationMinutes\": 15,\n  \"insuranceClaimed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             }
           }
         },
         {
-          "name": "Get Appointment",
+          "name": "Double-booking same slot is refused (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
@@ -855,40 +1998,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/appointments/1",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "appointments",
-                "1"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Query Appointments",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/appointments?patientId=1&status=SCHEDULED",
+              "raw": "{{gatewayUrl}}/api/v1/appointments",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -896,24 +2006,126 @@
                 "api",
                 "v1",
                 "appointments"
-              ],
-              "query": [
-                {
-                  "key": "patientId",
-                  "value": "1"
-                },
-                {
-                  "key": "status",
-                  "value": "SCHEDULED"
-                }
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"doctorId\": {{doctorId}},\n  \"slot\": \"{{apptDate}}T10:30:00\",\n  \"type\": \"OPD\",\n  \"reason\": \"Double booking\",\n  \"durationMinutes\": 15,\n  \"insuranceClaimed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Patient cannot book for someone else (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/appointments",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": 999999,\n  \"doctorId\": {{doctorId}},\n  \"slot\": \"{{apptDate}}T09:00:00\",\n  \"type\": \"OPD\",\n  \"reason\": \"Not my booking\",\n  \"durationMinutes\": 15,\n  \"insuranceClaimed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/appointments/{{appointmentId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments",
+                "{{appointmentId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -921,6 +2133,21 @@
         },
         {
           "name": "Reschedule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [
@@ -930,7 +2157,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/appointments/1/reschedule",
+              "raw": "{{gatewayUrl}}/api/v1/appointments/{{appointmentId}}/reschedule",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -938,27 +2165,49 @@
                 "api",
                 "v1",
                 "appointments",
-                "1",
+                "{{appointmentId}}",
                 "reschedule"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"newSlot\": \"2026-09-16T11:00:00\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newSlot\": \"{{apptDate}}T11:00:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Cancel",
+          "name": "Check In (RECEPTIONIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [
@@ -968,7 +2217,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/appointments/1/cancel",
+              "raw": "{{gatewayUrl}}/api/v1/appointments/{{appointmentId}}/status",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -976,75 +2225,54 @@
                 "api",
                 "v1",
                 "appointments",
-                "1",
-                "cancel"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Patient request\"\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Status",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/appointments/1/status",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "appointments",
-                "1",
+                "{{appointmentId}}",
                 "status"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"CHECKED_IN\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CHECKED_IN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Live OPD Queue",
+          "name": "Live OPD Queue (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/appointments/queue?doctorId=1",
+              "raw": "{{gatewayUrl}}/api/v1/appointments/queue?doctorId={{doctorId}}",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1057,28 +2285,267 @@
               "query": [
                 {
                   "key": "doctorId",
-                  "value": "1"
+                  "value": "{{doctorId}}"
                 }
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
               ]
+            }
+          }
+        },
+        {
+          "name": "Patient lists own appointments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Only their own', () => data.content.forEach(a => pm.expect(a.patientId).to.eql(pm.collectionVariables.get('patientId') * 1)));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/appointments",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Book second appointment (RECEPTIONIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('appointment2Id', data.appointmentId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/appointments",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"doctorId\": {{doctorId}},\n  \"slot\": \"{{apptDate}}T12:00:00\",\n  \"type\": \"OPD\",\n  \"reason\": \"To be cancelled\",\n  \"durationMinutes\": 15,\n  \"insuranceClaimed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cancel (PATIENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/appointments/{{appointment2Id}}/cancel",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments",
+                "{{appointment2Id}}",
+                "cancel"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Patient request\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Malformed request returns 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/appointments",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{receptionistToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"type\": \"NOT_A_TYPE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
     },
     {
-      "name": "EMR",
+      "name": "4. EMR",
+      "description": "Medical records, vitals, amendments, prescriptions, PDF summary.",
       "item": [
         {
-          "name": "Create Medical Record",
+          "name": "Create Medical Record (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('recordId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1099,131 +2566,45 @@
                 "records"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"patientId\": 1,\n  \"doctorId\": 1,\n  \"appointmentId\": 1,\n  \"recordType\": \"CONSULTATION\",\n  \"chiefComplaint\": \"Chest pain\",\n  \"notes\": \"Stable, follow-up advised\"\n}"
-            },
+            "description": "RecordFactory (Factory Method) builds the right record type.",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Record",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/emr/records/1",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "emr",
-                "records",
-                "1"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Clinical History",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/emr/patients/1/history",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "emr",
-                "patients",
-                "1",
-                "history"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Amend Record",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/emr/records/1/amend",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "emr",
-                "records",
-                "1",
-                "amend"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"newValue\": \"Updated diagnosis notes\",\n  \"reason\": \"Lab correction\"\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"doctorId\": {{doctorId}},\n  \"appointmentId\": {{appointmentId}},\n  \"recordType\": \"CONSULTATION\",\n  \"chiefComplaint\": \"Chest pain\",\n  \"notes\": \"Stable, follow-up advised\",\n  \"finalise\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             }
           }
         },
         {
-          "name": "Record Vitals",
+          "name": "Record Vitals (NURSE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1244,23 +2625,244 @@
                 "vitals"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"patientId\": 1,\n  \"recordId\": 1,\n  \"bpSystolic\": 120,\n  \"bpDiastolic\": 80,\n  \"pulse\": 72,\n  \"temperature\": 36.8,\n  \"spo2\": 98,\n  \"heightCm\": 170,\n  \"weightKg\": 68\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{nurseToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"recordId\": {{recordId}},\n  \"bpSystolic\": 120,\n  \"bpDiastolic\": 80,\n  \"pulse\": 72,\n  \"temperature\": 36.8,\n  \"spo2\": 98,\n  \"heightCm\": 170,\n  \"weightKg\": 68\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Patient reads own record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/emr/records/{{recordId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "emr",
+                "records",
+                "{{recordId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
             }
           }
         },
         {
-          "name": "Create Prescription",
+          "name": "Pharmacist cannot read medical record (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/emr/records/{{recordId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "emr",
+                "records",
+                "{{recordId}}"
+              ]
+            },
+            "description": "Security: medical records are limited to doctors, nurses, admins and the patient themself.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pharmacistToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Amend Record (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/emr/records/{{recordId}}/amend",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "emr",
+                "records",
+                "{{recordId}}",
+                "amend"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newValue\": \"Updated diagnosis notes\",\n  \"reason\": \"Lab correction\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Clinical History (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/emr/patients/{{patientId}}/history",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "emr",
+                "patients",
+                "{{patientId}}",
+                "history"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Prescription (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('prescriptionId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1281,33 +2883,50 @@
                 "prescriptions"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"recordId\": 1,\n  \"patientId\": 1,\n  \"doctorId\": 1,\n  \"items\": [\n    {\n      \"drugName\": \"Atorvastatin\",\n      \"dosage\": \"10mg\",\n      \"frequency\": \"OD\",\n      \"durationDays\": 30,\n      \"instructions\": \"After dinner\"\n    }\n  ]\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recordId\": {{recordId}},\n  \"patientId\": {{patientId}},\n  \"doctorId\": {{doctorId}},\n  \"items\": [\n    {\n      \"drugName\": \"Paracetamol\",\n      \"dosage\": \"500mg\",\n      \"frequency\": \"TID\",\n      \"durationDays\": 3,\n      \"instructions\": \"After food\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Get Prescription",
+          "name": "Get Prescription (PHARMACIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/emr/prescriptions/1",
+              "raw": "{{gatewayUrl}}/api/v1/emr/prescriptions/{{prescriptionId}}",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1316,15 +2935,17 @@
                 "v1",
                 "emr",
                 "prescriptions",
-                "1"
+                "{{prescriptionId}}"
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{pharmacistToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -1332,16 +2953,26 @@
         },
         {
           "name": "Export Patient Summary (PDF)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/emr/patients/1/summary?format=PDF",
+              "raw": "{{gatewayUrl}}/api/v1/emr/patients/{{patientId}}/summary?format=PDF",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1350,7 +2981,7 @@
                 "v1",
                 "emr",
                 "patients",
-                "1",
+                "{{patientId}}",
                 "summary"
               ],
               "query": [
@@ -1360,12 +2991,14 @@
                 }
               ]
             },
+            "description": "Abstract Factory: PDF/EXCEL/CSV each get a matching formatter + exporter + styler.",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -1374,10 +3007,76 @@
       ]
     },
     {
-      "name": "Lab",
+      "name": "5. Lab",
+      "description": "Order -> sample collected -> processing -> results -> completed.",
       "item": [
         {
-          "name": "Order Lab Test",
+          "name": "Test Catalogue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('labTest1Id', data[0].id);",
+                  "pm.collectionVariables.set('labTest2Id', data[1].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/lab/catalogue",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lab",
+                "catalogue"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Order Lab Tests (DOCTOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('labOrderId', data.id);",
+                  "pm.collectionVariables.set('labItem1Id', data.items[0].id);",
+                  "pm.collectionVariables.set('labItem2Id', data.items[1].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1398,57 +3097,45 @@
                 "orders"
               ]
             },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"patientId\": 1,\n  \"doctorId\": 1,\n  \"priority\": \"NORMAL\",\n  \"testIds\": [\n    1,\n    2\n  ]\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"doctorId\": {{doctorId}},\n  \"priority\": \"NORMAL\",\n  \"testIds\": [{{labTest1Id}}, {{labTest2Id}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Order",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/lab/orders/1",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "lab",
-                "orders",
-                "1"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
           }
         },
         {
-          "name": "Update Sample Status",
+          "name": "Sample Collected (LAB_TECH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [
@@ -1458,7 +3145,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/lab/orders/1/status",
+              "raw": "{{gatewayUrl}}/api/v1/lab/orders/{{labOrderId}}/status",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1467,27 +3154,110 @@
                 "v1",
                 "lab",
                 "orders",
-                "1",
+                "{{labOrderId}}",
                 "status"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"COLLECTED\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{labtechToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COLLECTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Upload Results",
+          "name": "Processing (LAB_TECH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/lab/orders/{{labOrderId}}/status",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lab",
+                "orders",
+                "{{labOrderId}}",
+                "status"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{labtechToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PROCESSING\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload Result for test 1 (LAB_TECH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1497,7 +3267,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/lab/orders/1/results",
+              "raw": "{{gatewayUrl}}/api/v1/lab/orders/{{labOrderId}}/results",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1506,29 +3276,51 @@
                 "v1",
                 "lab",
                 "orders",
-                "1",
+                "{{labOrderId}}",
                 "results"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderItemId\": 1,\n  \"value\": \"13.5\",\n  \"unit\": \"g/dL\",\n  \"referenceRange\": \"13-17\",\n  \"abnormalFlag\": false\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{labtechToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderItemId\": {{labItem1Id}},\n  \"value\": \"13.5\",\n  \"unit\": \"g/dL\",\n  \"referenceRange\": \"13-17\",\n  \"abnormalFlag\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Test Catalogue",
+          "name": "Upload Result for test 2 (LAB_TECH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
@@ -1536,7 +3328,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/lab/catalogue",
+              "raw": "{{gatewayUrl}}/api/v1/lab/orders/{{labOrderId}}/results",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1544,15 +3336,75 @@
                 "api",
                 "v1",
                 "lab",
-                "catalogue"
+                "orders",
+                "{{labOrderId}}",
+                "results"
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{labtechToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderItemId\": {{labItem2Id}},\n  \"value\": \"13.5\",\n  \"unit\": \"g/dL\",\n  \"referenceRange\": \"13-17\",\n  \"abnormalFlag\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Patient sees completed order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Order is COMPLETED', () => pm.expect(data.status).to.eql('COMPLETED'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/lab/orders/{{labOrderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lab",
+                "orders",
+                "{{labOrderId}}"
+              ]
+            },
+            "description": "All results uploaded -> order COMPLETED, and a lab.result.ready event goes to notifications.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -1561,49 +3413,27 @@
       ]
     },
     {
-      "name": "Pharmacy",
+      "name": "6. Pharmacy",
+      "description": "Drug catalogue, stock, dispensing, low-stock alert.",
       "item": [
         {
-          "name": "Search Drug Catalogue",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Add Drug (PHARMACIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('drugId', data.id);",
+                  "}"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/pharmacy/drugs?search=Paracetamol",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "pharmacy",
-                "drugs"
-              ],
-              "query": [
-                {
-                  "key": "search",
-                  "value": "Paracetamol"
-                }
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
-          }
-        },
-        {
-          "name": "Add Drug",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1624,23 +3454,45 @@
                 "drugs"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"PARA500\",\n  \"genericName\": \"Paracetamol\",\n  \"brandName\": \"Crocin\",\n  \"form\": \"TABLET\",\n  \"strength\": \"500mg\",\n  \"manufacturer\": \"GSK\",\n  \"unitPrice\": 2.5,\n  \"reorderLevel\": 100\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{pharmacistToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"PARA{{runId}}\",\n  \"genericName\": \"Paracetamol\",\n  \"brandName\": \"Crocin\",\n  \"form\": \"TABLET\",\n  \"strength\": \"500mg\",\n  \"manufacturer\": \"GSK\",\n  \"unitPrice\": 2.5,\n  \"reorderLevel\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Update Stock",
+          "name": "Add Stock Batch (PHARMACIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [
@@ -1650,7 +3502,7 @@
               }
             ],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/pharmacy/stock/1",
+              "raw": "{{gatewayUrl}}/api/v1/pharmacy/stock/{{drugId}}",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1659,26 +3511,99 @@
                 "v1",
                 "pharmacy",
                 "stock",
-                "1"
+                "{{drugId}}"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"batchNo\": \"B2026A\",\n  \"quantity\": 500,\n  \"expiryDate\": \"2027-06-30\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{pharmacistToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchNo\": \"B{{runId}}\",\n  \"quantity\": 105,\n  \"expiryDate\": \"2027-06-30\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Search Drug Catalogue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/pharmacy/drugs?search=Paracetamol",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pharmacy",
+                "drugs"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Paracetamol"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
                 }
               ]
             }
           }
         },
         {
-          "name": "Dispense Prescription",
+          "name": "Dispense Prescription (PHARMACIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1699,31 +3624,49 @@
                 "dispense"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"prescriptionId\": 1,\n  \"patientId\": 1,\n  \"patientCategory\": \"GENERAL\",\n  \"items\": [\n    {\n      \"drugId\": 1,\n      \"quantity\": 10\n    }\n  ]\n}"
-            },
+            "description": "Strategy pattern picks the price by patient category. Stock drops below the reorder level.",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{pharmacistToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prescriptionId\": {{prescriptionId}},\n  \"patientId\": {{patientId}},\n  \"patientCategory\": \"GENERAL\",\n  \"items\": [\n    { \"drugId\": {{drugId}}, \"quantity\": 9 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Low-stock Report",
+          "name": "Low-stock Report (PHARMACIST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Dispensed drug is low on stock', () => pm.expect(JSON.stringify(data)).to.include('PARA' + pm.collectionVariables.get('runId')));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{gatewayUrl}}/api/v1/pharmacy/stock/low",
               "host": [
@@ -1737,12 +3680,14 @@
                 "low"
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{pharmacistToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -1751,10 +3696,81 @@
       ]
     },
     {
-      "name": "Billing",
+      "name": "7. Billing",
+      "description": "Invoice from booking, invoice, payment, refund, revenue report.",
       "item": [
         {
-          "name": "Generate Invoice",
+          "name": "Provisional invoice from booking saga (ACCOUNTANT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Saga created an invoice', () => pm.expect(data.content.length).to.be.above(0));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/billing/invoices?patientId={{patientId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "billing",
+                "invoices"
+              ],
+              "query": [
+                {
+                  "key": "patientId",
+                  "value": "{{patientId}}"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accountantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Invoice (ACCOUNTANT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('invoiceId', data.id);",
+                  "pm.collectionVariables.set('invoiceTotal', data.total);",
+                  "pm.test('Total = 400 + 5% tax = 420', () => pm.expect(Number(data.total)).to.eql(420));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1775,33 +3791,50 @@
                 "invoices"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"patientId\": 1,\n  \"appointmentId\": 1,\n  \"items\": [\n    {\n      \"description\": \"Consultation Fee\",\n      \"category\": \"CONSULTATION\",\n      \"quantity\": 1,\n      \"unitPrice\": 500.0,\n      \"taxRate\": 5\n    }\n  ]\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{accountantToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{patientId}},\n  \"appointmentId\": {{appointmentId}},\n  \"items\": [\n    {\n      \"description\": \"ECG\",\n      \"category\": \"PROCEDURE\",\n      \"quantity\": 1,\n      \"unitPrice\": 400.0,\n      \"taxRate\": 5\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Get Invoice",
+          "name": "Patient views own invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/billing/invoices/1",
+              "raw": "{{gatewayUrl}}/api/v1/billing/invoices/{{invoiceId}}",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1810,65 +3843,40 @@
                 "v1",
                 "billing",
                 "invoices",
-                "1"
+                "{{invoiceId}}"
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
             }
           }
         },
         {
-          "name": "Query Invoices",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Record UPI Payment (ACCOUNTANT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('paymentId', data.paymentId);",
+                  "}"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/billing/invoices?patientId=1&status=ISSUED",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "billing",
-                "invoices"
-              ],
-              "query": [
-                {
-                  "key": "patientId",
-                  "value": "1"
-                },
-                {
-                  "key": "status",
-                  "value": "ISSUED"
-                }
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
-          }
-        },
-        {
-          "name": "Record Payment",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1889,23 +3897,92 @@
                 "payments"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"invoiceId\": 1,\n  \"method\": \"UPI\",\n  \"amount\": 525.0,\n  \"reference\": \"john@okhdfcbank\"\n}"
-            },
+            "description": "PaymentProcessorFactory (Factory Method) picks the UPI processor.",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{accountantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": {{invoiceId}},\n  \"method\": \"UPI\",\n  \"amount\": {{invoiceTotal}},\n  \"reference\": \"john@okhdfcbank\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Invoice is now PAID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Status PAID', () => pm.expect(data.status).to.eql('PAID'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/billing/invoices/{{invoiceId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "billing",
+                "invoices",
+                "{{invoiceId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accountantToken}}",
+                  "type": "string"
                 }
               ]
             }
           }
         },
         {
-          "name": "Issue Refund",
+          "name": "Issue Partial Refund (ACCOUNTANT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1926,33 +4003,50 @@
                 "refunds"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentId\": 1,\n  \"amount\": 100.0,\n  \"reason\": \"Service not availed\"\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{accountantToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": {{paymentId}},\n  \"amount\": 100.0,\n  \"reason\": \"Service not availed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Revenue Report",
+          "name": "Revenue Report (CSV)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
-              "raw": "{{gatewayUrl}}/api/v1/billing/reports/revenue?from=2026-09-01&to=2026-09-30&format=PDF",
+              "raw": "{{gatewayUrl}}/api/v1/billing/reports/revenue?from={{monthStart}}&to={{reportTo}}&format=CSV",
               "host": [
                 "{{gatewayUrl}}"
               ],
@@ -1966,24 +4060,26 @@
               "query": [
                 {
                   "key": "from",
-                  "value": "2026-09-01"
+                  "value": "{{monthStart}}"
                 },
                 {
                   "key": "to",
-                  "value": "2026-09-30"
+                  "value": "{{reportTo}}"
                 },
                 {
                   "key": "format",
-                  "value": "PDF"
+                  "value": "CSV"
                 }
               ]
             },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{accountantToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -1992,10 +4088,86 @@
       ]
     },
     {
-      "name": "Notification",
+      "name": "8. Notification",
+      "description": "Event-driven notifications via RabbitMQ, manual dispatch, preferences.",
       "item": [
         {
-          "name": "Dispatch Notification",
+          "name": "Delivery log for the patient (ADMIN)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 2000); // let RabbitMQ events arrive"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.test('Event notifications reached the patient', () => pm.expect(JSON.stringify(data)).to.include('APPOINTMENT_CONFIRMED'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/notifications?userId={{patientUserId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{patientUserId}}"
+                }
+              ]
+            },
+            "description": "Appointment, invoice and lab events flowed through RabbitMQ to notification-service.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Dispatch Notification (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -2016,61 +4188,45 @@
                 "send"
               ]
             },
+            "description": "NotificationSenderFactory (Factory Method) picks EMAIL/SMS/PUSH sender.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": 1,\n  \"channel\": \"EMAIL\",\n  \"templateCode\": \"APPOINTMENT_CONFIRMED\",\n  \"variables\": {\n    \"tokenNumber\": \"OPD-1-001\",\n    \"slot\": \"2026-09-15T10:30:00\"\n  }\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
+              "raw": "{\n  \"userId\": {{patientUserId}},\n  \"channel\": \"EMAIL\",\n  \"templateCode\": \"APPOINTMENT_CONFIRMED\",\n  \"variables\": { \"tokenNumber\": \"OPD-1-001\", \"slot\": \"{{apptDate}}T10:30:00\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Query Delivery Log",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
-            ],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/notifications?userId=1",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "notifications"
-              ],
-              "query": [
-                {
-                  "key": "userId",
-                  "value": "1"
-                }
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}"
-                }
-              ]
             }
           }
         },
         {
-          "name": "Update Channel Preferences",
+          "name": "Update Channel Preferences (PATIENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
             "header": [
@@ -2091,22 +4247,268 @@
                 "preferences"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"channel\": \"SMS\",\n  \"enabled\": false\n}"
-            },
+            "description": "",
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}"
+                  "value": "{{patientToken}}",
+                  "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"SMS\",\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
+    },
+    {
+      "name": "9. Token lifecycle",
+      "description": "Refresh, forgot password, logout, refresh-after-logout refused.",
+      "item": [
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "pm.collectionVariables.set('patientRefreshToken', data.refreshToken);",
+                  "pm.collectionVariables.set('patientToken', data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{patientRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"patient_{{runId}}@hms.local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Logout (PATIENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = (pm.response.headers.get('Content-Type') || '').includes('json') ? pm.response.json() : null;",
+                  "const data = body ? body.data : null;",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{patientRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Refresh after logout is refused (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{patientRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@hms.local"
+    },
+    {
+      "key": "adminPassword",
+      "value": "ChangeMe!Admin123"
+    },
+    {
+      "key": "password",
+      "value": "Passw0rd!123"
     }
   ]
 }
