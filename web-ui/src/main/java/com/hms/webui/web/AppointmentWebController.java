@@ -55,12 +55,19 @@ public class AppointmentWebController {
 
     @PostMapping("/book")
     public String book(@CurrentUser SessionUser user,
-                        @RequestParam Long patientId, @RequestParam Long doctorId, @RequestParam LocalDateTime slot,
+                        // The form omits patientId for PATIENT users, who always book for themselves.
+                        @RequestParam(required = false) Long patientId, @RequestParam Long doctorId, @RequestParam LocalDateTime slot,
                         @RequestParam String type, @RequestParam(required = false) String reason,
                         @RequestParam(required = false) Integer durationMinutes,
                         RedirectAttributes redirectAttributes) {
         Guard.require(user, Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN);
         Long effectivePatientId = user.isPatient() ? user.patientId() : patientId;
+        if (effectivePatientId == null) {
+            redirectAttributes.addFlashAttribute("error", user.isPatient()
+                    ? "Your login isn't linked to a patient profile yet. Ask reception to register you."
+                    : "Patient ID is required.");
+            return "redirect:/appointments/book?doctorId=" + doctorId;
+        }
         try {
             AppointmentResponse a = appointmentService.book(new BookAppointmentRequest(effectivePatientId, doctorId, slot,
                     type, reason, durationMinutes, null, null), user);
