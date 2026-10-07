@@ -21,7 +21,7 @@
                   "pm.collectionVariables.set('runId', runId);",
                   "const d = new Date(); d.setDate(d.getDate() + 3);",
                   "while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);",
-                  "const iso = x => x.toISOString().slice(0, 10);",
+                  "const iso = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');",
                   "pm.collectionVariables.set('apptDate', iso(d));",
                   "pm.collectionVariables.set('apptDay', ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'][d.getDay()]);",
                   "const leave = new Date(d); leave.setDate(leave.getDate() + 28);",
