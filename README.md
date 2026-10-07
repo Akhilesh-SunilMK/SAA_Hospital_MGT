@@ -37,19 +37,35 @@ Startup order is health-check gated (`depends_on: condition: service_healthy`): 
 RabbitMQ first, then service-registry, then config-server, then the gateway and business services. First
 boot takes a few minutes while Maven resolves dependencies inside each service's build stage.
 
+The compose file caps each JVM's heap and shrinks MySQL's buffers so the whole stack (13 JVMs, 9 MySQL
+instances, RabbitMQ) fits in an 8GB Docker Desktop VM — about 4.6GB in use once up. With more memory
+available, set `HMS_JAVA_OPTS` in `.env` to replace the JVM flags.
+
 Once up:
+- Web UI: http://localhost:8090 — register a user for any non-admin role, then log in. ADMIN can't be
+  self-registered: log in as the bootstrap admin (`HMS_ADMIN_EMAIL`/`HMS_ADMIN_PASSWORD`, default
+  `admin@hms.local` / `ChangeMe!Admin123`), who can then create further admins.
 - Eureka dashboard: http://localhost:8761
 - Gateway: http://localhost:8080
 - Import `postman/HMS.postman_collection.json` into Postman — run **Auth → Register** then **Auth → Login**
   first; the Login request's test script stores the returned access/refresh tokens into collection
   variables so every subsequent request authenticates automatically.
 
+### End-to-end smoke test
+
+```bash
+python3 scripts/e2e_smoke.py   # against the running compose stack; exits non-zero on any failure
+```
+
+Registers one user per role and walks the full clinical flow through the gateway — doctor profile and
+schedule, patient registration, booking (incl. the billing saga), EMR record/vitals/prescription, lab
+order → results, pharmacy dispense → low-stock, invoice → payment → refund, RabbitMQ-driven notifications —
+plus role/ownership denials and every main web-ui page. Standard library only; safe to re-run.
+
 ### Building/testing without Docker
 
 ```bash
-export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # or any JDK 17/21
-mvn -q -f common/pom.xml install -DskipTests
-mvn test   # runs every module's unit tests via the reactor
+mvn install   # builds every module and runs its unit tests; works on JDK 17, 21 or 25
 ```
 
 ## Design patterns implemented
@@ -111,7 +127,9 @@ lab-service/
 pharmacy-service/
 billing-service/
 notification-service/
+web-ui/                 server-rendered (Thymeleaf) frontend on :8090, calls everything via the gateway
 postman/HMS.postman_collection.json
+scripts/e2e_smoke.py    end-to-end smoke test against the running stack
 docker-compose.yml
 ```
 

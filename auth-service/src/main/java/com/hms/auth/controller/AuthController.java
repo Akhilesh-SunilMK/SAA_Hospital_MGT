@@ -9,11 +9,15 @@ import com.hms.auth.dto.UserResponse;
 import com.hms.auth.service.AuthService;
 import com.hms.common.dto.ApiResponse;
 import com.hms.common.security.JwtAuthenticationFilter;
+import com.hms.common.security.Role;
 import com.hms.common.web.TraceIdSupport;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +37,11 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody RegistrationRequest req) {
+        // Registration is public, so without this anyone could mint themselves an ADMIN account.
+        // The first admin comes from AdminBootstrap; after that, only an admin can create another.
+        if (req.role() == Role.ADMIN && !callerIsAdmin()) {
+            throw new AccessDeniedException("ADMIN accounts can only be created by an existing admin");
+        }
         UserResponse user = authService.register(req);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(user, "User registered successfully", TraceIdSupport.current()));
@@ -73,5 +82,11 @@ public class AuthController {
 
     private Long currentUserId(HttpServletRequest request) {
         return (Long) request.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
+    }
+
+    private static boolean callerIsAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 }

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Record payment')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Record payment</h2>
+    <div class="card"><div class="card-body">
+        <form method="post" th:action="@{/billing/payments/new}">
+            <div class="mb-3">
+                <label class="form-label">Invoice ID</label>
+                <input type="number" class="form-control" name="invoiceId" th:value="${invoiceId}" required/>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Method</label>
+                    <select class="form-select" name="method" required>
+                        <option value="CASH">Cash</option><option value="CARD">Card</option><option value="UPI">UPI</option>
+                        <option value="NET_BANKING">Net banking</option><option value="INSURANCE">Insurance</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Amount</label>
+                    <input type="number" step="0.01" class="form-control" name="amount" required/>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Reference (optional)</label>
+                <input class="form-control" name="reference"/>
+            </div>
+            <button type="submit" class="btn btn-primary">Record payment</button>
+        </form>
+    </div></div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

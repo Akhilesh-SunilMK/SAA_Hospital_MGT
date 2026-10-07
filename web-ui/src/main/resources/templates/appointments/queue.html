@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Queue')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Live queue</h2>
+
+    <form method="get" th:action="@{/appointments/queue}" class="row g-2 mb-3">
+        <div class="col-auto">
+            <select class="form-select" name="doctorId" onchange="this.form.submit()">
+                <option value="">Select a doctor</option>
+                <option th:each="d : ${doctors}" th:value="${d.id}" th:text="'Dr. ' + ${d.firstName} + ' ' + ${d.lastName}"
+                        th:selected="${d.id == doctorId}"></option>
+            </select>
+        </div>
+    </form>
+
+    <div class="card" th:if="${queue != null}">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Token</th><th>Patient ID</th><th>When</th><th>Type</th><th>Priority</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="a : ${queue}">
+                <td th:text="${a.tokenNumber}"></td>
+                <td th:text="${a.patientId}"></td>
+                <td th:text="${a.slot}"></td>
+                <td th:text="${a.type}"></td>
+                <td><span class="badge text-bg-warning badge-status" th:text="${a.priority}"></span></td>
+                <td><span class="badge text-bg-info badge-status" th:text="${a.status}"></span></td>
+                <td class="table-actions"><a class="btn btn-sm btn-outline-primary" th:href="@{/appointments/{id}(id=${a.appointmentId})}">Open</a></td>
+            </tr>
+            <tr th:if="${queue.isEmpty()}"><td colspan="7" class="text-center text-muted py-4">Queue is empty.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="text-muted" th:if="${queue == null}">Choose a doctor to see their live queue.</p>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

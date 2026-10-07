@@ -2,6 +2,7 @@ package com.hms.billing.controller;
 
 import com.hms.common.dto.ApiResponse;
 import com.hms.common.dto.PageResponse;
+import com.hms.common.security.PatientIdentityResolver;
 import com.hms.common.web.TraceIdSupport;
 import com.hms.billing.dto.*;
 import com.hms.billing.entity.Invoice;
@@ -16,6 +17,7 @@ import com.hms.billing.service.ReportService;
 import com.hms.billing.service.RefundService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
@@ -40,15 +42,17 @@ public class BillingController {
     private final RefundService refundService;
     private final ReportService reportService;
     private final InvoiceRepository invoiceRepository;
+    private final PatientIdentityResolver patientIdentityResolver;
 
     public BillingController(InvoiceService invoiceService, PaymentService paymentService,
                               RefundService refundService, ReportService reportService,
-                              InvoiceRepository invoiceRepository) {
+                              InvoiceRepository invoiceRepository, PatientIdentityResolver patientIdentityResolver) {
         this.invoiceService = invoiceService;
         this.paymentService = paymentService;
         this.refundService = refundService;
         this.reportService = reportService;
         this.invoiceRepository = invoiceRepository;
+        this.patientIdentityResolver = patientIdentityResolver;
     }
 
     @PostMapping("/invoices")
@@ -82,9 +86,13 @@ public class BillingController {
             HttpServletRequest httpRequest) {
         if (isPatientRole()) {
             // a PATIENT caller may only query their own invoices
-            patientId = (Long) httpRequest.getAttribute(USER_ID_ATTR);
+            patientId = patientIdentityResolver.callerPatientId(httpRequest);
         }
         Pageable pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+        if (isPatientRole() && patientId == null) {
+            // No linked patient profile: an unfiltered query here would leak everyone's invoices.
+            return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(Page.<InvoiceResponse>empty(pageable)), TraceIdSupport.current()));
+        }
         PageResponse<InvoiceResponse> result = PageResponse.from(invoiceService.query(patientId, status, pageable));
         return ResponseEntity.ok(ApiResponse.ok(result, TraceIdSupport.current()));
     }
@@ -93,8 +101,7 @@ public class BillingController {
         if (!isPatientRole()) {
             return;
         }
-        Long callerId = (Long) httpRequest.getAttribute(USER_ID_ATTR);
-        if (callerId == null || !callerId.equals(invoicePatientId)) {
+        if (!patientIdentityResolver.isCallerPatient(invoicePatientId, httpRequest)) {
             throw new org.springframework.security.access.AccessDeniedException("Not the owner of this invoice");
         }
     }

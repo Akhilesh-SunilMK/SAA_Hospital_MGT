@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Medical history')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Medical history &mdash; patient <span th:text="${patientId}"></span></h2>
+        <div>
+            <a th:if="${currentUser.doctor}" class="btn btn-primary btn-sm" th:href="@{/emr/records/new(patientId=${patientId})}">New record</a>
+            <a class="btn btn-outline-secondary btn-sm" th:href="@{/emr/patients/{id}/summary(id=${patientId},format=PDF)}">
+                <i class="bi bi-download"></i> Download summary (PDF)
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Date</th><th>Type</th><th>Chief complaint</th><th>Diagnoses</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="r : ${records}">
+                <td th:text="${r.createdAt}"></td>
+                <td th:text="${r.recordType}"></td>
+                <td th:text="${r.chiefComplaint ?: '—'}"></td>
+                <td>
+                    <span th:each="d : ${r.diagnoses}" class="badge text-bg-light border me-1" th:text="${d}"></span>
+                </td>
+                <td>
+                    <span class="badge" th:classappend="${r.finalised} ? 'text-bg-success' : 'text-bg-secondary'"
+                          th:text="${r.finalised} ? 'Finalised' : 'Draft'"></span>
+                </td>
+                <td class="table-actions"><a class="btn btn-sm btn-outline-primary" th:href="@{/emr/records/{id}(id=${r.id})}">Open</a></td>
+            </tr>
+            <tr th:if="${records.isEmpty()}"><td colspan="6" class="text-center text-muted py-4">No records yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

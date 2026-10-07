@@ -15,9 +15,11 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,6 +47,20 @@ public class PatientController {
         Patient patient = patientService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(PatientResponse.from(patient), "Patient registered successfully", TraceIdSupport.current()));
+    }
+
+    /**
+     * The caller's own patient profile. Auth user ids and patient ids are separate sequences, so
+     * other services resolve "is this caller the patient?" through here (see PatientIdentityResolver).
+     */
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<ApiResponse<PatientResponse>> me(HttpServletRequest request) {
+        Long userId = callerUserId(request);
+        if (userId == null) {
+            throw new AccessDeniedException("Token carries no user id");
+        }
+        return ResponseEntity.ok(ApiResponse.ok(PatientResponse.from(patientService.getByUserId(userId)), TraceIdSupport.current()));
     }
 
     @GetMapping("/{id}")
@@ -106,8 +122,11 @@ public class PatientController {
                 .body(ApiResponse.created(AllergyResponse.from(allergy), "Allergy recorded", TraceIdSupport.current()));
     }
 
+    // open-in-view is disabled (see application.yml), so the lazy `allergies`/`emergencyContacts`
+    // collections must be touched inside an active transaction, not after getById() returns.
     @GetMapping("/{id}/allergies")
     @PreAuthorize("isAuthenticated()")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<AllergyResponse>>> listAllergies(@PathVariable Long id, HttpServletRequest request) {
         Patient patient = patientService.getById(id);
         patientService.assertOwnerOrStaff(patient, callerUserId(request), isStaff());
@@ -126,6 +145,7 @@ public class PatientController {
 
     @GetMapping("/{id}/emergency-contacts")
     @PreAuthorize("isAuthenticated()")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<EmergencyContactResponse>>> listEmergencyContacts(
             @PathVariable Long id, HttpServletRequest request) {
         Patient patient = patientService.getById(id);

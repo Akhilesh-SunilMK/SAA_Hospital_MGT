@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Prescription #' + ${prescription.id})}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-1">Prescription #<span th:text="${prescription.id}"></span></h2>
+    <span class="badge text-bg-info badge-status" th:text="${prescription.status}"></span>
+    <span class="text-muted small ms-2" th:text="'Issued ' + ${prescription.issuedAt}"></span>
+
+    <div class="card mt-3"><div class="card-body">
+        <dl class="row">
+            <dt class="col-3">Patient ID</dt><dd class="col-9" th:text="${prescription.patientId}"></dd>
+            <dt class="col-3">EMR record</dt><dd class="col-9" th:text="${prescription.recordId ?: '—'}"></dd>
+        </dl>
+        <table class="table table-sm">
+            <thead><tr><th>Drug</th><th>Dosage</th><th>Frequency</th><th>Duration</th><th>Instructions</th></tr></thead>
+            <tbody>
+            <tr th:each="i : ${prescription.items}">
+                <td th:text="${i.drugName}"></td>
+                <td th:text="${i.dosage}"></td>
+                <td th:text="${i.frequency}"></td>
+                <td th:text="${i.durationDays} + ' days'"></td>
+                <td th:text="${i.instructions ?: '—'}"></td>
+            </tr>
+            </tbody>
+        </table>
+        <a th:if="${currentUser.pharmacist}" class="btn btn-primary btn-sm"
+           th:href="@{/pharmacy/dispense(patientId=${prescription.patientId}, prescriptionId=${prescription.id})}">Dispense this prescription</a>
+    </div></div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

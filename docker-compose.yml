@@ -6,12 +6,24 @@ x-mysql-common: &mysql-common
     MYSQL_USER: ${DB_USER:-hms}
     MYSQL_PASSWORD: ${DB_PASSWORD:-hms}
   networks: [hms-network]
-  command: --default-authentication-plugin=mysql_native_password
+  # Sized for a laptop running all 9 instances side by side; raise for real data volumes.
+  command: --default-authentication-plugin=mysql_native_password --performance-schema=OFF
+           --innodb-buffer-pool-size=32M --innodb-log-buffer-size=8M --max-connections=50
+
+# Default JVM ergonomics give each of the 14 JVMs a heap ceiling of 1/4 of the Docker VM's RAM, which
+# overcommits a typical 8GB Docker Desktop VM until the kernel OOM-kills services at random.
+# Override with HMS_JAVA_OPTS (e.g. drop the caps) when Docker has more memory available.
+x-jvm-opts: &jvm-opts
+  JAVA_TOOL_OPTIONS: ${HMS_JAVA_OPTS:--XX:+UseSerialGC -Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=48m -XX:TieredStopAtLevel=1 -Xss512k}
 
 x-service-env-common: &service-env-common
+  <<: *jvm-opts
   EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
   CONFIG_SERVER_URL: http://config-server:8888
+  # Owner-or-staff checks resolve a PATIENT caller's patient id here (common PatientIdentityResolver).
+  PATIENT_SERVICE_URL: http://patient-service:8082
   JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-hms-shared-signing-secret-key-32-bytes-min}
+  JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-7200000}
   DB_USER: ${DB_USER:-hms}
   DB_PASSWORD: ${DB_PASSWORD:-hms}
   RABBITMQ_HOST: rabbitmq
@@ -38,6 +50,8 @@ services:
       dockerfile: service-registry/Dockerfile
     restart: unless-stopped
     ports: ["8761:8761"]
+    environment:
+      <<: *jvm-opts
     networks: [hms-network]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8761/actuator/health"]
@@ -53,6 +67,7 @@ services:
     restart: unless-stopped
     ports: ["8888:8888"]
     environment:
+      <<: *jvm-opts
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
     depends_on:
       service-registry: { condition: service_healthy }
@@ -188,6 +203,9 @@ services:
     ports: ["8081:8081"]
     environment:
       <<: *service-env-common
+      # First ADMIN account (public registration can't create one). Change the password via .env.
+      HMS_ADMIN_EMAIL: ${HMS_ADMIN_EMAIL:-admin@hms.local}
+      HMS_ADMIN_PASSWORD: ${HMS_ADMIN_PASSWORD:-ChangeMe!Admin123}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-auth:3306/hms_auth?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     depends_on:
       mysql-auth: { condition: service_healthy }
@@ -373,6 +391,25 @@ services:
     networks: [hms-network]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8089/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: web-ui/Dockerfile
+    restart: unless-stopped
+    ports: ["8090:8090"]
+    environment:
+      <<: *jvm-opts
+      GATEWAY_BASE_URL: http://api-gateway:8080
+    depends_on:
+      api-gateway: { condition: service_healthy }
+    networks: [hms-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 10

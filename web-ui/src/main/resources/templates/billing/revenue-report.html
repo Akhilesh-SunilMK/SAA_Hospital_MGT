@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Revenue report')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Revenue report</h2>
+    <div class="card"><div class="card-body">
+        <form method="get" th:action="@{/billing/reports/revenue/download}">
+            <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">From</label><input type="date" class="form-control" name="from" required/></div>
+                <div class="col-md-4 mb-3"><label class="form-label">To</label><input type="date" class="form-control" name="to" required/></div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Format</label>
+                    <select class="form-select" name="format">
+                        <option value="PDF">PDF</option>
+                        <option value="EXCEL">Excel</option>
+                        <option value="CSV">CSV</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-download"></i> Download report</button>
+        </form>
+    </div></div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

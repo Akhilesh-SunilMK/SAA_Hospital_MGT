@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Test catalogue')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Lab test catalogue</h2>
+    <div class="card">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Code</th><th>Name</th><th>Sample type</th><th>Price</th><th>Turnaround</th></tr></thead>
+            <tbody>
+            <tr th:each="t : ${tests}">
+                <td th:text="${t.code}"></td>
+                <td th:text="${t.name}"></td>
+                <td th:text="${t.sampleType}"></td>
+                <td th:text="${t.price}"></td>
+                <td th:text="${t.turnaroundHours} + ' h'"></td>
+            </tr>
+            <tr th:if="${tests.isEmpty()}"><td colspan="5" class="text-center text-muted py-4">No tests in catalogue.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

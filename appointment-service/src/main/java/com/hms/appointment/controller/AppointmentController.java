@@ -6,7 +6,7 @@ import com.hms.appointment.dto.RescheduleRequest;
 import com.hms.appointment.dto.StatusUpdateRequest;
 import com.hms.appointment.entity.Appointment;
 import com.hms.appointment.entity.AppointmentStatus;
-import com.hms.appointment.security.JwtRequestSupport;
+import com.hms.common.security.PatientIdentityResolver;
 import com.hms.appointment.service.AppointmentService;
 import com.hms.common.dto.ApiResponse;
 import com.hms.common.dto.PageResponse;
@@ -18,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,16 +38,20 @@ import java.util.List;
 public class AppointmentController {
 
     private final AppointmentService appointmentService;
-    private final JwtRequestSupport jwtRequestSupport;
+    private final PatientIdentityResolver patientIdentityResolver;
 
-    public AppointmentController(AppointmentService appointmentService, JwtRequestSupport jwtRequestSupport) {
+    public AppointmentController(AppointmentService appointmentService, PatientIdentityResolver patientIdentityResolver) {
         this.appointmentService = appointmentService;
-        this.jwtRequestSupport = jwtRequestSupport;
+        this.patientIdentityResolver = patientIdentityResolver;
     }
 
     @PostMapping
     @PreAuthorize("hasAnyRole('PATIENT','RECEPTIONIST')")
-    public ResponseEntity<ApiResponse<AppointmentResponse>> book(@Valid @RequestBody BookAppointmentRequest request) {
+    public ResponseEntity<ApiResponse<AppointmentResponse>> book(@Valid @RequestBody BookAppointmentRequest request,
+                                                                  Authentication authentication) {
+        if (!isStaff(authentication) && !patientIdentityResolver.isCallerPatient(request.patientId())) {
+            throw new AccessDeniedException("Patients may only book appointments for themselves");
+        }
         AppointmentResponse response = appointmentService.book(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(response, "Appointment booked successfully", TraceIdSupport.current()));
@@ -70,10 +75,15 @@ public class AppointmentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
-        if (!isStaff(authentication)) {
-            patientId = jwtRequestSupport.currentUserId(authentication);
-        }
         int cappedSize = Math.min(size, 100);
+        if (!isStaff(authentication)) {
+            patientId = patientIdentityResolver.callerPatientId();
+            if (patientId == null) {
+                // No linked patient profile: an unfiltered query here would leak everyone's appointments.
+                return ResponseEntity.ok(ApiResponse.ok(
+                        new PageResponse<>(List.of(), page, cappedSize, 0, 0, true), TraceIdSupport.current()));
+            }
+        }
         Page<Appointment> result = appointmentService.query(patientId, doctorId, status, PageRequest.of(page, cappedSize));
         Page<AppointmentResponse> mapped = result.map(a -> AppointmentResponse.from(a, null));
         if (date != null) {
@@ -129,18 +139,11 @@ public class AppointmentController {
                         .contains(a.getAuthority()));
     }
 
-    /**
-     * Simplification (documented): the appointment's patientId is treated as equal to the
-     * caller's hms.userId for OWNER checks, since resolving the patient's underlying auth
-     * user_id would require an extra patient-service round trip on every read. Staff roles
-     * always pass regardless of this mapping.
-     */
     private void assertOwnerOrStaff(Appointment appointment, Authentication authentication) {
         if (isStaff(authentication)) {
             return;
         }
-        Long callerId = jwtRequestSupport.currentUserId(authentication);
-        if (callerId == null || !callerId.equals(appointment.getPatientId())) {
+        if (!patientIdentityResolver.isCallerPatient(appointment.getPatientId())) {
             throw new UnauthorizedException("You are not permitted to view this appointment");
         }
     }
@@ -151,8 +154,7 @@ public class AppointmentController {
         if (receptionist) {
             return;
         }
-        Long callerId = jwtRequestSupport.currentUserId(authentication);
-        if (callerId == null || !callerId.equals(appointment.getPatientId())) {
+        if (!patientIdentityResolver.isCallerPatient(appointment.getPatientId())) {
             throw new UnauthorizedException("You are not permitted to modify this appointment");
         }
     }

@@ -1,6 +1,6 @@
 package com.hms.emr.controller;
 
-import com.hms.common.security.JwtAuthenticationFilter;
+import com.hms.common.security.PatientIdentityResolver;
 import com.hms.emr.factory.ReportFormat;
 import com.hms.emr.service.ReportService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReportController {
 
     private final ReportService reportService;
+    private final PatientIdentityResolver patientIdentityResolver;
 
-    public ReportController(ReportService reportService) {
+    public ReportController(ReportService reportService, PatientIdentityResolver patientIdentityResolver) {
         this.reportService = reportService;
+        this.patientIdentityResolver = patientIdentityResolver;
     }
 
     @GetMapping("/patients/{id}/summary")
@@ -44,14 +46,11 @@ public class ReportController {
     }
 
     private void assertOwnerOrDoctor(Long patientId, HttpServletRequest request) {
-        Object attr = request.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
-        Long callerId = attr instanceof Long l ? l : null;
-        boolean owner = callerId != null && callerId.equals(patientId);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean doctorOrAdmin = auth != null && auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(a -> a.equals("ROLE_DOCTOR") || a.equals("ROLE_ADMIN"));
-        if (!owner && !doctorOrAdmin) {
+        if (!doctorOrAdmin && !patientIdentityResolver.isCallerPatient(patientId, request)) {
             throw new AccessDeniedException("Not authorised to export this patient's summary");
         }
     }

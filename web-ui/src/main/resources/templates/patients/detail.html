@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Patient · ' + ${patient.mrn})}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h2 class="mb-0" th:text="${patient.firstName + ' ' + patient.lastName}"></h2>
+            <span class="text-muted">MRN <strong th:text="${patient.mrn}"></strong></span>
+            <span th:if="${patient.deleted}" class="badge text-bg-secondary ms-2">Inactive</span>
+        </div>
+        <div>
+            <a th:if="${currentUser.receptionist or currentUser.admin}" class="btn btn-outline-secondary btn-sm" th:href="@{/patients/{id}/edit(id=${patient.id})}">Edit</a>
+            <a th:if="${currentUser.patient or currentUser.receptionist or currentUser.admin}" class="btn btn-outline-primary btn-sm" th:href="@{/appointments/book(patientId=${patient.id})}">Book appointment</a>
+            <a th:if="${currentUser.doctor or currentUser.nurse or currentUser.admin or currentUser.patient}" class="btn btn-outline-primary btn-sm" th:href="@{/emr/patients/{id}/history(id=${patient.id})}">Medical history</a>
+            <a th:if="${currentUser.accountant or currentUser.admin or currentUser.patient}" class="btn btn-outline-primary btn-sm" th:href="@{/billing/invoices(patientId=${patient.id})}">Invoices</a>
+            <form th:if="${currentUser.admin}" class="d-inline" method="post" th:action="@{/patients/{id}/delete(id=${patient.id})}" onsubmit="return confirm('Deactivate this patient record?');">
+                <button class="btn btn-outline-danger btn-sm" type="submit">Deactivate</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100"><div class="card-body">
+                <h5 class="card-title">Demographics</h5>
+                <dl class="row mb-0">
+                    <dt class="col-5">Date of birth</dt><dd class="col-7" th:text="${patient.dob}"></dd>
+                    <dt class="col-5">Gender</dt><dd class="col-7" th:text="${patient.gender}"></dd>
+                    <dt class="col-5">Blood group</dt><dd class="col-7" th:text="${patient.bloodGroup ?: '—'}"></dd>
+                    <dt class="col-5">Phone</dt><dd class="col-7" th:text="${patient.phone}"></dd>
+                    <dt class="col-5">Email</dt><dd class="col-7" th:text="${patient.email ?: '—'}"></dd>
+                    <dt class="col-5">Address</dt><dd class="col-7" th:text="${patient.address ?: '—'}"></dd>
+                    <dt class="col-5">Chronic conditions</dt><dd class="col-7" th:text="${patient.chronicConditions ?: '—'}"></dd>
+                    <dt class="col-5">Allergies summary</dt><dd class="col-7" th:text="${patient.allergiesSummary ?: '—'}"></dd>
+                </dl>
+            </div></div>
+        </div>
+
+        <div class="col-md-6" th:if="${currentUser.receptionist or currentUser.doctor or currentUser.admin}">
+            <div class="card h-100"><div class="card-body">
+                <h5 class="card-title">Admission</h5>
+                <form th:if="${currentUser.receptionist or currentUser.doctor}" method="post" th:action="@{/patients/{id}/admit(id=${patient.id})}" class="row g-2">
+                    <div class="col-6"><input class="form-control form-control-sm" name="wardId" type="number" placeholder="Ward ID" required/></div>
+                    <div class="col-6"><input class="form-control form-control-sm" name="bedNo" placeholder="Bed no." required/></div>
+                    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit">Admit</button></div>
+                </form>
+                <form th:if="${currentUser.doctor or currentUser.admin}" method="post" th:action="@{/patients/{id}/discharge(id=${patient.id})}" class="mt-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Discharge</button>
+                </form>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-md-6">
+            <div class="card h-100"><div class="card-body">
+                <h5 class="card-title">Allergies</h5>
+                <ul class="list-group list-group-flush mb-3">
+                    <li class="list-group-item" th:each="a : ${allergies}">
+                        <strong th:text="${a.allergen}"></strong> &mdash; <span th:text="${a.severity}"></span>
+                        <span class="text-muted small" th:text="'(noted ' + ${a.notedOn} + ')'"></span>
+                    </li>
+                    <li class="list-group-item text-muted" th:if="${allergies.isEmpty()}">No allergies recorded.</li>
+                </ul>
+                <form th:if="${currentUser.staff}" method="post" th:action="@{/patients/{id}/allergies(id=${patient.id})}" class="row g-2">
+                    <div class="col-4"><input class="form-control form-control-sm" name="allergen" placeholder="Allergen" required/></div>
+                    <div class="col-3">
+                        <select class="form-select form-select-sm" name="severity" required>
+                            <option value="MILD">Mild</option><option value="MODERATE">Moderate</option><option value="SEVERE">Severe</option>
+                        </select>
+                    </div>
+                    <div class="col-3"><input class="form-control form-control-sm" name="notedOn" type="date" required/></div>
+                    <div class="col-2"><button class="btn btn-sm btn-outline-primary w-100" type="submit">Add</button></div>
+                </form>
+            </div></div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100"><div class="card-body">
+                <h5 class="card-title">Emergency contacts</h5>
+                <ul class="list-group list-group-flush mb-3">
+                    <li class="list-group-item" th:each="c : ${contacts}">
+                        <strong th:text="${c.name}"></strong> (<span th:text="${c.relation}"></span>) &mdash; <span th:text="${c.phone}"></span>
+                    </li>
+                    <li class="list-group-item text-muted" th:if="${contacts.isEmpty()}">No emergency contacts recorded.</li>
+                </ul>
+                <form th:if="${currentUser.staff}" method="post" th:action="@{/patients/{id}/emergency-contacts(id=${patient.id})}" class="row g-2">
+                    <div class="col-4"><input class="form-control form-control-sm" name="name" placeholder="Name" required/></div>
+                    <div class="col-3"><input class="form-control form-control-sm" name="relation" placeholder="Relation" required/></div>
+                    <div class="col-3"><input class="form-control form-control-sm" name="phone" placeholder="Phone" required/></div>
+                    <div class="col-2"><button class="btn btn-sm btn-outline-primary w-100" type="submit">Add</button></div>
+                </form>
+            </div></div>
+        </div>
+    </div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

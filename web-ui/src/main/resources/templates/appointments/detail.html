@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Appointment ' + ${appointment.tokenNumber})}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h2 class="mb-0">Appointment <span th:text="${appointment.tokenNumber}"></span></h2>
+            <span class="badge text-bg-info badge-status" th:text="${appointment.status}"></span>
+            <span class="badge text-bg-warning badge-status" th:text="${appointment.priority}"></span>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100"><div class="card-body">
+                <h5 class="card-title">Details</h5>
+                <dl class="row mb-0">
+                    <dt class="col-5">Doctor</dt><dd class="col-7" th:text="${appointment.doctorName}"></dd>
+                    <dt class="col-5">Patient ID</dt><dd class="col-7" th:text="${appointment.patientId}"></dd>
+                    <dt class="col-5">When</dt><dd class="col-7" th:text="${appointment.slot}"></dd>
+                    <dt class="col-5">Type</dt><dd class="col-7" th:text="${appointment.type}"></dd>
+                    <dt class="col-5">Duration</dt><dd class="col-7" th:text="${appointment.durationMinutes} + ' min'"></dd>
+                    <dt class="col-5">Reason</dt><dd class="col-7" th:text="${appointment.reason ?: '—'}"></dd>
+                </dl>
+            </div></div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100"><div class="card-body">
+                <h5 class="card-title">Actions</h5>
+
+                <div th:if="${currentUser.patient or currentUser.receptionist or currentUser.admin}">
+                    <form method="post" th:action="@{/appointments/{id}/reschedule(id=${appointment.appointmentId})}" class="row g-2 mb-3">
+                        <div class="col-8"><input type="datetime-local" class="form-control" name="newSlot" required/></div>
+                        <div class="col-4"><button class="btn btn-outline-primary w-100" type="submit">Reschedule</button></div>
+                    </form>
+
+                    <form method="post" th:action="@{/appointments/{id}/cancel(id=${appointment.appointmentId})}" class="mb-3"
+                          onsubmit="return confirm('Cancel this appointment?');">
+                        <button class="btn btn-outline-danger" type="submit">Cancel appointment</button>
+                    </form>
+                </div>
+                <p class="text-muted small" th:if="${!(currentUser.patient or currentUser.receptionist or currentUser.admin)}">
+                    Only the patient, reception, or admin can reschedule or cancel this appointment.
+                </p>
+
+                <form th:if="${currentUser.doctor or currentUser.receptionist}" method="post"
+                      th:action="@{/appointments/{id}/status(id=${appointment.appointmentId})}" class="row g-2">
+                    <div class="col-8">
+                        <select class="form-select" name="status">
+                            <option th:each="s : ${ {'SCHEDULED','CHECKED_IN','IN_PROGRESS','COMPLETED','NO_SHOW'} }" th:value="${s}" th:text="${s}"></option>
+                        </select>
+                    </div>
+                    <div class="col-4"><button class="btn btn-outline-secondary w-100" type="submit">Update status</button></div>
+                </form>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="card mt-3" th:if="${currentUser.doctor}">
+        <div class="card-body">
+            <h5 class="card-title">Clinical actions</h5>
+            <a class="btn btn-sm btn-primary" th:href="@{/emr/records/new(patientId=${appointment.patientId}, appointmentId=${appointment.appointmentId})}">New EMR record</a>
+            <a class="btn btn-sm btn-outline-primary" th:href="@{/lab/orders/new(patientId=${appointment.patientId})}">Order lab test</a>
+            <a class="btn btn-sm btn-outline-primary" th:href="@{/emr/prescriptions/new(patientId=${appointment.patientId})}">Write prescription</a>
+        </div>
+    </div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

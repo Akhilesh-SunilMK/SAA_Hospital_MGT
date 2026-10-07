@@ -15,6 +15,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     Optional<Patient> findByIdAndDeletedFalse(Long id);
 
+    Optional<Patient> findByUserIdAndDeletedFalse(Long userId);
+
     @Query("select p from Patient p where p.deleted = false and (" +
             "lower(p.mrn) = lower(:term) or " +
             "lower(p.firstName) like lower(concat('%', :term, '%')) or " +

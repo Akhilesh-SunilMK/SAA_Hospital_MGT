@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Dispense')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Dispense medication</h2>
+    <div class="card"><div class="card-body">
+        <form method="post" th:action="@{/pharmacy/dispense}">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Patient ID</label>
+                    <input type="number" class="form-control" name="patientId" th:value="${patientId}" required/>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Prescription ID (optional)</label>
+                    <input type="number" class="form-control" name="prescriptionId" th:value="${prescriptionId}"/>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Patient category</label>
+                    <select class="form-select" name="patientCategory">
+                        <option value="GENERAL">General</option>
+                        <option value="INSURED">Insured</option>
+                        <option value="SENIOR_CITIZEN">Senior citizen</option>
+                        <option value="STAFF_CONCESSION">Staff concession</option>
+                    </select>
+                </div>
+            </div>
+
+            <label class="form-label">Items</label>
+            <div id="rows">
+                <div class="row g-2 mb-2 dyn-row">
+                    <div class="col-md-6"><input type="number" class="form-control" name="drugId" placeholder="Drug ID" required/></div>
+                    <div class="col-md-4"><input type="number" class="form-control" name="quantity" placeholder="Quantity" required/></div>
+                    <div class="col-md-2"><button type="button" class="btn btn-outline-danger" onclick="removeRow(this)">&times;</button></div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="addRow('rows','row-template')">
+                <i class="bi bi-plus-lg"></i> Add item
+            </button>
+            <div class="form-text mb-3">Tip: drug IDs are shown in the <a th:href="@{/pharmacy/drugs}">drug catalogue</a>.</div>
+            <br/>
+            <button type="submit" class="btn btn-primary">Dispense</button>
+        </form>
+    </div></div>
+
+    <template id="row-template">
+        <div class="row g-2 mb-2 dyn-row">
+            <div class="col-md-6"><input type="number" class="form-control" name="drugId" placeholder="Drug ID" required/></div>
+            <div class="col-md-4"><input type="number" class="form-control" name="quantity" placeholder="Quantity" required/></div>
+            <div class="col-md-2"><button type="button" class="btn btn-outline-danger" onclick="removeRow(this)">&times;</button></div>
+        </div>
+    </template>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

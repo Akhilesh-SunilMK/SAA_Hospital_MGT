@@ -74,6 +74,11 @@ public class PatientService {
                 .orElseThrow(() -> new ResourceNotFoundException("Patient not found: " + id));
     }
 
+    public Patient getByUserId(Long userId) {
+        return patientRepository.findByUserIdAndDeletedFalse(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("No patient profile linked to user " + userId));
+    }
+
     public void assertOwnerOrStaff(Patient patient, Long callerUserId, boolean isStaff) {
         if (isStaff) {
             return;

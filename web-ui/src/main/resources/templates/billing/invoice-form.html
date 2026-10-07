@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Create invoice')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Create invoice</h2>
+    <div class="card"><div class="card-body">
+        <form method="post" th:action="@{/billing/invoices/new}">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Patient ID</label>
+                    <input type="number" class="form-control" name="patientId" th:value="${patientId}" required/>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Appointment ID (optional)</label>
+                    <input type="number" class="form-control" name="appointmentId"/>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Category</label>
+                    <input class="form-control" name="category" placeholder="CONSULTATION / LAB / PHARMACY / ROOM..." required/>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Description</label>
+                    <input class="form-control" name="description"/>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Amount</label><input type="number" step="0.01" class="form-control" name="amount" required/></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Tax rate (%)</label><input type="number" step="0.01" class="form-control" name="taxRate"/></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Discount</label><input type="number" step="0.01" class="form-control" name="discount"/></div>
+            </div>
+            <button type="submit" class="btn btn-primary">Create invoice</button>
+            <a class="btn btn-link" th:href="@{/billing/invoices}">Cancel</a>
+        </form>
+    </div></div>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

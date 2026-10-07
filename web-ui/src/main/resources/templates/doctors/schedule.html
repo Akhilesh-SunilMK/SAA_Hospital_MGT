@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Schedule · ' + ${doctor.lastName})}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-1">Weekly schedule &mdash; Dr. <span th:text="${doctor.firstName + ' ' + doctor.lastName}"></span></h2>
+    <p class="text-muted">Saving replaces the doctor's entire weekly schedule with the rows below.</p>
+
+    <div class="card mb-3" th:if="${savedSchedule != null}">
+        <div class="card-body">
+            <h5 class="card-title">Saved schedule</h5>
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Day</th><th>Start</th><th>End</th><th>Slot (min)</th></tr></thead>
+                <tbody>
+                <tr th:each="s : ${savedSchedule}">
+                    <td th:text="${s.dayOfWeek}"></td><td th:text="${s.startTime}"></td>
+                    <td th:text="${s.endTime}"></td><td th:text="${s.slotDurationMin}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card"><div class="card-body">
+        <form method="post" th:action="@{/doctors/{id}/schedule(id=${doctor.id})}">
+            <div id="rows">
+                <div class="row g-2 mb-2 dyn-row">
+                    <div class="col-md-3">
+                        <select class="form-select" name="dayOfWeek" required>
+                            <option th:each="d : ${dayOptions}" th:value="${d}" th:text="${d}"></option>
+                        </select>
+                    </div>
+                    <div class="col-md-3"><input type="time" class="form-control" name="startTime" required/></div>
+                    <div class="col-md-3"><input type="time" class="form-control" name="endTime" required/></div>
+                    <div class="col-md-2"><input type="number" class="form-control" name="slotDurationMin" value="15" min="5" required/></div>
+                    <div class="col-md-1"><button type="button" class="btn btn-outline-danger" onclick="removeRow(this)">&times;</button></div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="addRow('rows','row-template')">
+                <i class="bi bi-plus-lg"></i> Add day
+            </button>
+            <br/>
+            <button type="submit" class="btn btn-primary">Save schedule</button>
+            <a class="btn btn-link" th:href="@{/doctors/{id}(id=${doctor.id})}">Back</a>
+        </form>
+    </div></div>
+
+    <template id="row-template">
+        <div class="row g-2 mb-2 dyn-row">
+            <div class="col-md-3">
+                <select class="form-select" name="dayOfWeek" required>
+                    <option th:each="d : ${dayOptions}" th:value="${d}" th:text="${d}"></option>
+                </select>
+            </div>
+            <div class="col-md-3"><input type="time" class="form-control" name="startTime" required/></div>
+            <div class="col-md-3"><input type="time" class="form-control" name="endTime" required/></div>
+            <div class="col-md-2"><input type="number" class="form-control" name="slotDurationMin" value="15" min="5" required/></div>
+            <div class="col-md-1"><button type="button" class="btn btn-outline-danger" onclick="removeRow(this)">&times;</button></div>
+        </div>
+    </template>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

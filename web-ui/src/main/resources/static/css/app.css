@@ -1,0 +1,31 @@
+body {
+    background-color: #f4f6f9;
+}
+
+main.container, main.container-fluid {
+    max-width: 1200px;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.table-actions a, .table-actions button {
+    margin-right: .25rem;
+}
+
+.badge-status {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.auth-card {
+    max-width: 440px;
+    margin: 4rem auto;
+}
+
+.stat-card .display-6 {
+    font-weight: 600;
+}

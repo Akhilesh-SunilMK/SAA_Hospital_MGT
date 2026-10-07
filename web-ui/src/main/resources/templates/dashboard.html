@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Dashboard')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-1">Welcome, <span th:text="${currentUser.firstName}">User</span></h2>
+    <p class="text-muted mb-4">
+        Signed in as <span class="badge text-bg-secondary" th:text="${currentUser.role}">ROLE</span>
+    </p>
+
+    <!-- ================= PATIENT ================= -->
+    <div th:if="${currentUser.patient}">
+        <div th:if="${profile == null}" class="alert alert-warning">
+            <i class="bi bi-info-circle"></i> Your login isn't linked to a patient record yet. Please visit
+            reception to complete your patient registration before booking appointments or viewing records.
+        </div>
+        <div th:if="${profile != null}" class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card stat-card h-100"><div class="card-body">
+                    <div class="text-muted small">Patient MRN</div>
+                    <div class="display-6" th:text="${profile.mrn}">MRN</div>
+                </div></div>
+            </div>
+            <div class="col-md-8">
+                <div class="card h-100"><div class="card-body">
+                    <h5 class="card-title">Quick actions</h5>
+                    <a class="btn btn-primary btn-sm" th:href="@{/appointments/book}">Book appointment</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/patients/{id}(id=${currentUser.patientId})}">View profile</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/emr/patients/{id}/history(id=${currentUser.patientId})}">Medical history</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/billing/invoices}">My bills</a>
+                </div></div>
+            </div>
+        </div>
+        <div class="card" th:if="${profile != null}">
+            <div class="card-body">
+                <h5 class="card-title">Upcoming appointments</h5>
+                <p th:if="${upcoming.isEmpty()}" class="text-muted mb-0">No upcoming appointments.</p>
+                <table class="table table-sm mb-0" th:unless="${upcoming.isEmpty()}">
+                    <thead><tr><th>Token</th><th>Doctor</th><th>When</th><th>Status</th></tr></thead>
+                    <tbody>
+                    <tr th:each="a : ${upcoming}">
+                        <td th:text="${a.tokenNumber}"></td>
+                        <td th:text="${a.doctorName}"></td>
+                        <td th:text="${a.slot}"></td>
+                        <td><span class="badge text-bg-info badge-status" th:text="${a.status}"></span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= DOCTOR ================= -->
+    <div th:if="${currentUser.doctor}">
+        <div th:if="${myDoctorProfile == null}" class="alert alert-warning">
+            <i class="bi bi-info-circle"></i> Your login isn't linked to a doctor profile yet. Ask an admin to
+            create one for you (Doctors &rarr; Add doctor) with this account's user ID:
+            <strong th:text="${currentUser.userId}"></strong>.
+        </div>
+        <div th:if="${myDoctorProfile != null}" class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card stat-card h-100"><div class="card-body">
+                    <div class="text-muted small">Patients in today's queue</div>
+                    <div class="display-6" th:text="${queue.size()}">0</div>
+                </div></div>
+            </div>
+            <div class="col-md-8">
+                <div class="card h-100"><div class="card-body">
+                    <h5 class="card-title">Quick actions</h5>
+                    <a class="btn btn-primary btn-sm" th:href="@{/appointments/queue(doctorId=${myDoctorProfile.id})}">My queue</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/doctors/{id}/schedule(id=${myDoctorProfile.id})}">My schedule</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/emr/records/new}">New EMR record</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/emr/prescriptions/new}">New prescription</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/lab/orders/new}">Order lab test</a>
+                </div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= NURSE ================= -->
+    <div th:if="${currentUser.nurse}" class="card mb-3"><div class="card-body">
+        <h5 class="card-title">Quick actions</h5>
+        <a class="btn btn-primary btn-sm" th:href="@{/emr/vitals/new}">Record vitals</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/appointments/queue}">Appointment queue</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/patients}">Find patient</a>
+    </div></div>
+
+    <!-- ================= RECEPTIONIST ================= -->
+    <div th:if="${currentUser.receptionist}" class="card mb-3"><div class="card-body">
+        <h5 class="card-title">Quick actions</h5>
+        <a class="btn btn-primary btn-sm" th:href="@{/patients/new}">Register new patient</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/appointments/book}">Book appointment</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/appointments/queue}">Front-desk queue</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/billing/invoices/new}">Create invoice</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/patients}">Find patient</a>
+    </div></div>
+
+    <!-- ================= LAB_TECH ================= -->
+    <div th:if="${currentUser.labTech}" class="card mb-3"><div class="card-body">
+        <h5 class="card-title">Quick actions</h5>
+        <a class="btn btn-primary btn-sm" th:href="@{/lab/orders}">Look up lab order</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/lab/catalogue}">Test catalogue</a>
+    </div></div>
+
+    <!-- ================= PHARMACIST ================= -->
+    <div th:if="${currentUser.pharmacist}">
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card stat-card h-100"><div class="card-body">
+                    <div class="text-muted small">Drugs below reorder level</div>
+                    <div class="display-6" th:text="${lowStock.size()}">0</div>
+                </div></div>
+            </div>
+            <div class="col-md-8">
+                <div class="card h-100"><div class="card-body">
+                    <h5 class="card-title">Quick actions</h5>
+                    <a class="btn btn-primary btn-sm" th:href="@{/pharmacy/dispense}">Dispense</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/pharmacy/drugs}">Drug catalogue</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/pharmacy/drugs/new}">Add drug</a>
+                    <a class="btn btn-outline-secondary btn-sm" th:href="@{/pharmacy/stock/low}">Low stock</a>
+                </div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= ACCOUNTANT ================= -->
+    <div th:if="${currentUser.accountant}" class="card mb-3"><div class="card-body">
+        <h5 class="card-title">Quick actions</h5>
+        <a class="btn btn-primary btn-sm" th:href="@{/billing/invoices}">Invoices</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/billing/invoices/new}">Create invoice</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/billing/reports/revenue}">Revenue report</a>
+    </div></div>
+
+    <!-- ================= ADMIN ================= -->
+    <div th:if="${currentUser.admin}" class="card mb-3"><div class="card-body">
+        <h5 class="card-title">Administration</h5>
+        <a class="btn btn-primary btn-sm" th:href="@{/doctors/new}">Add doctor</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/patients}">Patients</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/doctors}">Doctors</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/billing/reports/revenue}">Revenue report</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/notifications}">Notifications</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/pharmacy/stock/low}">Low stock</a>
+    </div></div>
+
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

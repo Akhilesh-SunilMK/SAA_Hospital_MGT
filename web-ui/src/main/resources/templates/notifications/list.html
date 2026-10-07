@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Notifications')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <h2 class="mb-3">Notifications</h2>
+
+    <div class="card mb-3"><div class="card-body">
+        <h5 class="card-title">Send notification</h5>
+        <form method="post" th:action="@{/notifications/send}">
+            <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">User ID</label><input type="number" class="form-control" name="userId" required/></div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Channel</label>
+                    <select class="form-select" name="channel" required>
+                        <option value="EMAIL">Email</option><option value="SMS">SMS</option><option value="PUSH">Push</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3"><label class="form-label">Template code</label><input class="form-control" name="templateCode" required/></div>
+            </div>
+            <div id="rows">
+                <div class="row g-2 mb-2 dyn-row">
+                    <div class="col-md-5"><input class="form-control" name="varName" placeholder="Variable name"/></div>
+                    <div class="col-md-5"><input class="form-control" name="varValue" placeholder="Value"/></div>
+                    <div class="col-md-2"><button type="button" class="btn btn-outline-danger" onclick="removeRow(this)">&times;</button></div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="addRow('rows','row-template')">Add variable</button>
+            <br/>
+            <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+    </div></div>
+
+    <form method="get" th:action="@{/notifications}" class="row g-2 mb-3">
+        <div class="col-auto"><input type="number" class="form-control" name="userId" th:value="${userId}" placeholder="User ID"/></div>
+        <div class="col-auto">
+            <select class="form-select" name="status">
+                <option value="">Any status</option>
+                <option th:each="s : ${ {'PENDING','SENT','FAILED','RETRYING','SKIPPED'} }" th:value="${s}" th:text="${s}" th:selected="${s == status}"></option>
+            </select>
+        </div>
+        <div class="col-auto"><button class="btn btn-outline-secondary" type="submit">Filter</button></div>
+    </form>
+
+    <div class="card">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>ID</th><th>User</th><th>Channel</th><th>Template</th><th>Status</th><th>Attempts</th><th>Sent</th></tr></thead>
+            <tbody>
+            <tr th:each="n : ${results.content}">
+                <td th:text="${n.id}"></td>
+                <td th:text="${n.userId}"></td>
+                <td th:text="${n.channel}"></td>
+                <td th:text="${n.templateCode}"></td>
+                <td><span class="badge text-bg-info badge-status" th:text="${n.status}"></span></td>
+                <td th:text="${n.attempts}"></td>
+                <td th:text="${n.sentAt ?: '—'}"></td>
+            </tr>
+            <tr th:if="${results.content.isEmpty()}"><td colspan="7" class="text-center text-muted py-4">No notifications.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <template id="row-template">
+        <div class="row g-2 mb-2 dyn-row">
+            <div class="col-md-5"><input class="form-control" name="varName" placeholder="Variable name"/></div>
+            <div class="col-md-5"><input class="form-control" name="varValue" placeholder="Value"/></div>
+            <div class="col-md-2"><button type="button" class="btn btn-outline-danger" onclick="removeRow(this)">&times;</button></div>
+        </div>
+    </template>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

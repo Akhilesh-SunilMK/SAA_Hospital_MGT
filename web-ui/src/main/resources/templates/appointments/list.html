@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Appointments')}"></head>
+<body>
+<div th:replace="~{fragments/layout :: nav}"></div>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Appointments</h2>
+        <a th:if="${currentUser.patient or currentUser.receptionist or currentUser.admin}" class="btn btn-primary" th:href="@{/appointments/book}">
+            <i class="bi bi-calendar-plus"></i> Book appointment
+        </a>
+    </div>
+
+    <form method="get" th:action="@{/appointments}" class="row g-2 mb-3" th:if="${currentUser.staff}">
+        <div class="col-auto"><input class="form-control" type="number" name="patientId" th:value="${patientId}" placeholder="Patient ID"/></div>
+        <div class="col-auto"><input class="form-control" type="number" name="doctorId" th:value="${doctorId}" placeholder="Doctor ID"/></div>
+        <div class="col-auto"><input class="form-control" type="date" name="date" th:value="${date}"/></div>
+        <div class="col-auto">
+            <select class="form-select" name="status">
+                <option value="">Any status</option>
+                <option th:each="s : ${ {'SCHEDULED','CHECKED_IN','IN_PROGRESS','COMPLETED','CANCELLED','NO_SHOW'} }"
+                        th:value="${s}" th:text="${s}" th:selected="${s == status}"></option>
+            </select>
+        </div>
+        <div class="col-auto"><button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i> Filter</button></div>
+    </form>
+
+    <div class="card">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Token</th><th>Doctor</th><th>When</th><th>Type</th><th>Priority</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="a : ${results.content}">
+                <td th:text="${a.tokenNumber}"></td>
+                <td th:text="${a.doctorName}"></td>
+                <td th:text="${a.slot}"></td>
+                <td th:text="${a.type}"></td>
+                <td th:text="${a.priority}"></td>
+                <td><span class="badge text-bg-info badge-status" th:text="${a.status}"></span></td>
+                <td class="table-actions"><a class="btn btn-sm btn-outline-primary" th:href="@{/appointments/{id}(id=${a.appointmentId})}">View</a></td>
+            </tr>
+            <tr th:if="${results.content.isEmpty()}"><td colspan="7" class="text-center text-muted py-4">No appointments found.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="mt-3" th:if="${results.totalPages > 1}">
+        <ul class="pagination">
+            <li class="page-item" th:each="i : ${#numbers.sequence(0, results.totalPages - 1)}" th:classappend="${i == results.page} ? 'active'">
+                <a class="page-link" th:href="@{/appointments(patientId=${patientId}, doctorId=${doctorId}, date=${date}, status=${status}, page=${i})}" th:text="${i + 1}"></a>
+            </li>
+        </ul>
+    </nav>
+</main>
+<div th:replace="~{fragments/layout :: footer}"></div>
+<div th:replace="~{fragments/layout :: scripts}"></div>
+</body>
+</html>

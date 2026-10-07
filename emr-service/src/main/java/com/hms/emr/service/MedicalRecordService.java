@@ -64,7 +64,9 @@ public class MedicalRecordService {
         return recordRepository.save(record);
     }
 
-    @Transactional(readOnly = true)
+    // Not readOnly: this "read" also writes an audit log entry (auditLogService.record below),
+    // so the transaction needs a writable connection despite mostly just fetching the record.
+    @Transactional
     public MedicalRecord getById(Long id, HttpServletRequest httpRequest) {
         MedicalRecord record = recordRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Medical record not found: " + id));

@@ -1,6 +1,7 @@
 package com.hms.notification.listener;
 
 import com.hms.common.event.DomainEvent;
+import com.hms.common.security.PatientIdentityResolver;
 import com.hms.notification.config.RabbitQueueConfig;
 import com.hms.notification.model.ChannelType;
 import com.hms.notification.service.NotificationDispatchService;
@@ -25,9 +26,12 @@ public class DomainEventListeners {
     private static final long PHARMACY_ADMIN_USER_ID = 0L;
 
     private final NotificationDispatchService dispatchService;
+    private final PatientIdentityResolver patientIdentityResolver;
 
-    public DomainEventListeners(NotificationDispatchService dispatchService) {
+    public DomainEventListeners(NotificationDispatchService dispatchService,
+                                PatientIdentityResolver patientIdentityResolver) {
         this.dispatchService = dispatchService;
+        this.patientIdentityResolver = patientIdentityResolver;
     }
 
     @RabbitListener(queues = RabbitQueueConfig.APPOINTMENT_CONFIRMED_QUEUE)
@@ -38,7 +42,7 @@ public class DomainEventListeners {
                 "tokenNumber", str(payload.get("tokenNumber")),
                 "slot", str(payload.get("slot"))
         );
-        safeDispatch(patientId, ChannelType.EMAIL, "APPOINTMENT_CONFIRMED", variables, event);
+        dispatchToPatient(patientId, ChannelType.EMAIL, "APPOINTMENT_CONFIRMED", variables, event);
     }
 
     @RabbitListener(queues = RabbitQueueConfig.INVOICE_GENERATED_QUEUE)
@@ -49,7 +53,7 @@ public class DomainEventListeners {
                 "invoiceNo", str(payload.get("invoiceNo")),
                 "amount", str(payload.get("amount"))
         );
-        safeDispatch(patientId, ChannelType.EMAIL, "INVOICE_GENERATED", variables, event);
+        dispatchToPatient(patientId, ChannelType.EMAIL, "INVOICE_GENERATED", variables, event);
     }
 
     @RabbitListener(queues = RabbitQueueConfig.LAB_RESULT_READY_QUEUE)
@@ -59,7 +63,7 @@ public class DomainEventListeners {
         Map<String, String> variables = Map.of(
                 "orderId", str(payload.get("orderId"))
         );
-        safeDispatch(patientId, ChannelType.EMAIL, "LAB_RESULT_READY", variables, event);
+        dispatchToPatient(patientId, ChannelType.EMAIL, "LAB_RESULT_READY", variables, event);
     }
 
     @RabbitListener(queues = RabbitQueueConfig.STOCK_BELOW_THRESHOLD_QUEUE)
@@ -71,6 +75,21 @@ public class DomainEventListeners {
                 "reorderLevel", str(payload.get("reorderLevel"))
         );
         safeDispatch(PHARMACY_ADMIN_USER_ID, ChannelType.EMAIL, "STOCK_LOW", variables, event);
+    }
+
+    /**
+     * Events carry the patient-service patientId, but notifications (delivery log, channel
+     * preferences) are keyed by the auth userId, so map one to the other first.
+     */
+    private void dispatchToPatient(Long patientId, ChannelType channel, String templateCode,
+                                   Map<String, String> variables, DomainEvent event) {
+        Long userId = patientIdentityResolver.userIdForPatient(patientId);
+        if (userId == null) {
+            log.info("Skipping {} for patient {}: no linked user account (traceId={})",
+                    templateCode, patientId, event.traceId());
+            return;
+        }
+        safeDispatch(userId, channel, templateCode, variables, event);
     }
 
     private void safeDispatch(Long userId, ChannelType channel, String templateCode,

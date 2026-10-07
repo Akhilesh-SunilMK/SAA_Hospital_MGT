@@ -2,6 +2,7 @@ package com.hms.emr.controller;
 
 import com.hms.common.dto.ApiResponse;
 import com.hms.common.security.JwtAuthenticationFilter;
+import com.hms.common.security.PatientIdentityResolver;
 import com.hms.common.web.TraceIdSupport;
 import com.hms.emr.dto.PrescriptionRequest;
 import com.hms.emr.dto.PrescriptionResponse;
@@ -16,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,9 +25,11 @@ import org.springframework.web.bind.annotation.*;
 public class PrescriptionController {
 
     private final PrescriptionService prescriptionService;
+    private final PatientIdentityResolver patientIdentityResolver;
 
-    public PrescriptionController(PrescriptionService prescriptionService) {
+    public PrescriptionController(PrescriptionService prescriptionService, PatientIdentityResolver patientIdentityResolver) {
         this.prescriptionService = prescriptionService;
+        this.patientIdentityResolver = patientIdentityResolver;
     }
 
     @PostMapping("/prescriptions")
@@ -36,8 +40,11 @@ public class PrescriptionController {
                 .body(ApiResponse.created(PrescriptionResponse.from(prescription), "Prescription created", TraceIdSupport.current()));
     }
 
+    // open-in-view is disabled: PrescriptionResponse.from() touches the lazy `items` collection,
+    // which needs an active transaction (see the same note in MedicalRecordController).
     @GetMapping("/prescriptions/{id}")
     @PreAuthorize("isAuthenticated()")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<PrescriptionResponse>> getById(@PathVariable Long id, HttpServletRequest httpRequest) {
         Prescription prescription = prescriptionService.getById(id);
         assertOwnerOrDoctorOrPharmacist(prescription.getPatientId(), httpRequest);
@@ -45,13 +52,11 @@ public class PrescriptionController {
     }
 
     private void assertOwnerOrDoctorOrPharmacist(Long patientId, HttpServletRequest request) {
-        Long callerId = callerUserId(request);
-        boolean owner = callerId != null && callerId.equals(patientId);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean doctorOrPharmacist = auth != null && auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(a -> a.equals("ROLE_DOCTOR") || a.equals("ROLE_PHARMACIST") || a.equals("ROLE_ADMIN"));
-        if (!owner && !doctorOrPharmacist) {
+        if (!doctorOrPharmacist && !patientIdentityResolver.isCallerPatient(patientId, request)) {
             throw new AccessDeniedException("Not authorised to view this prescription");
         }
     }

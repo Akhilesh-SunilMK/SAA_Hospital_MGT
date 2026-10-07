@@ -2,6 +2,7 @@ package com.hms.lab.controller;
 
 import com.hms.common.dto.ApiResponse;
 import com.hms.common.security.JwtAuthenticationFilter;
+import com.hms.common.security.PatientIdentityResolver;
 import com.hms.common.web.TraceIdSupport;
 import com.hms.lab.dto.LabOrderRequest;
 import com.hms.lab.dto.LabOrderResponse;
@@ -19,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 /** Base path matches SRS 6.2.6 exactly so the gateway route {@code Path=/api/v1/lab/**} forwards without rewriting. */
@@ -27,9 +29,11 @@ import org.springframework.web.bind.annotation.*;
 public class LabOrderController {
 
     private final LabOrderService labOrderService;
+    private final PatientIdentityResolver patientIdentityResolver;
 
-    public LabOrderController(LabOrderService labOrderService) {
+    public LabOrderController(LabOrderService labOrderService, PatientIdentityResolver patientIdentityResolver) {
         this.labOrderService = labOrderService;
+        this.patientIdentityResolver = patientIdentityResolver;
     }
 
     @PostMapping("/orders")
@@ -40,8 +44,11 @@ public class LabOrderController {
                 .body(ApiResponse.created(LabOrderResponse.from(order), "Lab order created", TraceIdSupport.current()));
     }
 
+    // open-in-view is disabled: LabOrderResponse.from() touches the lazy `items` collection,
+    // which needs an active transaction (see the same note in patient/emr controllers).
     @GetMapping("/orders/{id}")
     @PreAuthorize("isAuthenticated()")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<LabOrderResponse>> getById(@PathVariable Long id, HttpServletRequest httpRequest) {
         LabOrder order = labOrderService.getById(id);
         assertOwnerOrStaff(order.getPatientId(), httpRequest);
@@ -50,6 +57,7 @@ public class LabOrderController {
 
     @PatchMapping("/orders/{id}/status")
     @PreAuthorize("hasRole('LAB_TECH')")
+    @Transactional
     public ResponseEntity<ApiResponse<LabOrderResponse>> updateStatus(@PathVariable Long id,
                                                                        @Valid @RequestBody StatusUpdateRequest request) {
         LabOrder order = labOrderService.updateStatus(id, request.status());
@@ -73,13 +81,11 @@ public class LabOrderController {
     }
 
     private void assertOwnerOrStaff(Long patientId, HttpServletRequest request) {
-        Long callerId = callerUserId(request);
-        boolean owner = callerId != null && callerId.equals(patientId);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean staff = auth != null && auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(a -> !a.equals("ROLE_PATIENT"));
-        if (!owner && !staff) {
+        if (!staff && !patientIdentityResolver.isCallerPatient(patientId, request)) {
             throw new AccessDeniedException("Not authorised to view this lab order");
         }
     }
